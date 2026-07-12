@@ -115,6 +115,15 @@ methodology, 5 documented failure cases, and cost projections.
 6. **Frontend test coverage is low** — The backend code is structurally
    typed and typechecked, but frontend components lack unit tests.
 
+<img width="1920" height="1080" alt="Screenshot (313)" src="https://github.com/user-attachments/assets/62570267-a388-4793-8253-fd6cbb08a80f" />
+
+<img width="1920" height="1080" alt="Screenshot (314)" src="https://github.com/user-attachments/assets/d3e2a0c2-52e6-471f-99f7-32fabb8bcbb4" />
+<img width="1920" height="1080" alt="Screenshot (311)" src="https://github.com/user-attachments/assets/1b20843c-6752-415c-a990-37aa58f01457" />
+<img width="1920" height="1080" alt="Screenshot (312)" src="https://github.com/user-attachments/assets/22b07cd1-a5e8-476c-aa37-c1650fc73037" />
+<img width="1920" height="1080" alt="Screenshot (315)" src="https://github.com/user-attachments/assets/bbb1bb44-a6f8-42a2-87b6-7af96a4fe352" />
+<img width="1920" height="1080" alt="Screenshot (316)" src="https://github.com/user-attachments/assets/f261d593-870f-4f2a-a985-60a9c70071e9" />
+
+
 ## Future Improvements
 
 - [ ] Add a `role` column to users (admin/regular) with middleware guard
