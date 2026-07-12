@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  role         String   @default("user")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  submissions Submission[]
+  profile     Profile?
+
+  @@index([email])
+  @@index([username])
+}
+
+model Profile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio       String?
+  location  String?
+  company   String?
+  github    String?
+  linkedin  String?
+  website   String?
+  country   String?
+  xp        Int      @default(0)
+  streak    Int      @default(0)
+  badges    Json     @default("[]")
+  skills    Json     @default("[]")
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([xp])
+  @@index([streak])
+}
+
+model Problem {
+  id              String   @id @default(cuid())
+  title           String
+  slug            String   @unique
+  difficulty      String
+  category        String
+  description     String   @db.Text
+  constraints     String   @db.Text
+  examples        Json     @default("[]")
+  starterCode     Json     @default("{}")
+  tags            Json     @default("[]")
+  companies       Json     @default("[]")
+  hints           Json     @default("[]")
+  editorial       String?  @db.Text
+  complexity      Json?
+  acceptanceRate  Float    @default(0)
+  submissionCount Int      @default(0)
+  isPublished     Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  testCases   TestCase[]
+  submissions Submission[]
+
+  @@index([difficulty])
+  @@index([category])
+  @@index([isPublished])
+  @@index([isPublished, difficulty])
+  @@index([isPublished, category])
+}
+
+model TestCase {
+  id             String   @id @default(cuid())
+  input          String   @db.Text
+  expectedOutput String   @db.Text
+  isHidden       Boolean  @default(false)
+  problemId      String
+  problem        Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([problemId])
+}
+
+model Submission {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problemId    String
+  problem      Problem   @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  code         String    @db.Text
+  language     String
+  status       String
+  testResults  Json      @default("[]")
+  runtime      Float     @default(0)
+  memory       Float     @default(0)
+  errorMessage String?
+  errorType    String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  aiReview  AIReview?
+  interview InterviewFollowup?
+
+  @@index([userId])
+  @@index([problemId])
+  @@index([status])
+  @@index([userId, status])
+  @@index([problemId, status])
+  @@index([createdAt])
+  @@index([language])
+}
+
+model AIReview {
+  id           String   @id @default(cuid())
+  submissionId String   @unique
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  timeComplexity    String?
+  spaceComplexity   String?
+  readabilityScore  Float?
+  edgeCaseScore     Float?
+  namingScore       Float?
+  suggestedImprovement String? @db.Text
+  errorType         String?
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model InterviewFollowup {
+  id             String   @id @default(cuid())
+  submissionId   String   @unique
+  submission     Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question       String   @db.Text
+  answer         String?  @db.Text
+  evaluation     String?  @db.Text
+  verdict        String?  @db.Text
+  score          Float?
+  strengths      String?  @db.Text
+  weaknesses     String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}

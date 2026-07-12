@@ -1,0 +1,45 @@
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      target: deps
+    container_name: devpilot-backend-dev
+    command: ["pnpm", "--filter", "@devpilot/backend", "dev"]
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./apps/backend/src:/app/apps/backend/src
+      - ./packages:/app/packages
+    environment:
+      NODE_ENV: development
+      CORS_ORIGIN: http://localhost:5173
+
+  frontend:
+    build:
+      target: deps
+    container_name: devpilot-frontend-dev
+    command: ["pnpm", "--filter", "@devpilot/frontend", "dev"]
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/frontend/src:/app/apps/frontend/src
+      - ./apps/frontend/index.html:/app/apps/frontend/index.html
+      - ./packages:/app/packages
+    environment:
+      NODE_ENV: development
+      VITE_BACKEND_URL: http://localhost:4000
+    depends_on:
+      - backend
+
+  nginx:
+    ports:
+      - "80:80"
+    volumes:
+      - ./infrastructure/docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro

@@ -1,0 +1,18 @@
+# Prometheus configuration for DevPilot
+# Expected targets:
+#   - devpilot-backend:4000  (backend /metrics endpoint)
+#   - postgres-exporter:9187 (optional, for DB metrics)
+
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "devpilot-backend"
+    static_configs:
+      - targets: ["devpilot-backend:4000"]
+    metrics_path: /metrics
+
+  - job_name: "node"
+    static_configs:
+      - targets: ["node-exporter:9100"]

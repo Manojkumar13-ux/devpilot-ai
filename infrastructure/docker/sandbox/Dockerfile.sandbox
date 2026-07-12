@@ -1,0 +1,37 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV NODE_VERSION=20
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates curl gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
+
+RUN apt-get update && apt-get install -y \
+    nodejs \
+    python3 \
+    openjdk-17-jdk-headless \
+    g++ \
+    gcc \
+    golang-go \
+    rustc \
+    cargo \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g typescript ts-node 2>/dev/null || true
+
+RUN npx playwright install-deps 2>/dev/null || true
+
+WORKDIR /tmp
+
+COPY runner.js /app/runner.js
+
+RUN chmod +x /app/runner.js
+
+RUN useradd -m sandbox && chown -R sandbox:sandbox /app /tmp
+
+USER sandbox
+
+ENTRYPOINT ["node", "/app/runner.js"]

@@ -1,0 +1,27 @@
+{
+  "name": "devpilot-ai",
+  "private": true,
+  "version": "0.1.0",
+  "description": "DevPilot AI — AI Coding Interview Platform",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "clean": "turbo clean",
+    "db:generate": "pnpm --filter @devpilot/backend db:generate",
+    "db:push": "pnpm --filter @devpilot/backend db:push",
+    "db:studio": "pnpm --filter @devpilot/backend db:studio",
+    "docker:up": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.1.0"
+}
