@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npx turbo build --filter=@devpilot/frontend...",
+  "outputDirectory": "apps/frontend/dist",
+  "framework": "vite",
+  "installCommand": "pnpm install"
+}
