@@ -23,10 +23,12 @@ RUN pnpm --filter @devpilot/backend build
 
 FROM base AS runner
 ENV NODE_ENV=production
+ENV NODE_PATH=/app/apps/backend/node_modules
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 devpilot
 COPY --from=builder /app/apps/backend/dist ./dist
 COPY --from=builder /app/apps/backend/prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/backend/node_modules ./apps/backend/node_modules
 COPY --from=builder /app/packages ./packages
 USER devpilot
 EXPOSE 4000
