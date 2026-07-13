@@ -23,6 +23,8 @@ const LANG_IDS: Record<string, number> = {
 };
 
 const JUDGE0_API = process.env.JUDGE0_API_URL || 'https://ce.judge0.com';
+const JUDGE0_API_KEY = process.env.JUDGE0_API_KEY || '';
+const JUDGE0_API_HOST = process.env.JUDGE0_API_HOST || '';
 
 /** Judge0 status codes */
 const STATUS = {
@@ -58,9 +60,13 @@ export class Judge0Service {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
 
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (JUDGE0_API_KEY) headers['X-RapidAPI-Key'] = JUDGE0_API_KEY;
+      if (JUDGE0_API_HOST) headers['X-RapidAPI-Host'] = JUDGE0_API_HOST;
+
       const res = await fetch(`${JUDGE0_API}/submissions?base64_encoded=false&wait=true`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ source_code: sourceCode, language_id: langId, stdin: '' } satisfies Judge0Submission),
         signal: controller.signal,
       });
