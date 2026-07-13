@@ -95,18 +95,7 @@ export const createWorker = async (): Promise<Worker | null> => {
                 update: review,
               });
             })
-            .catch(async (err) => {
-              const msg = err instanceof AiReviewError ? err.message : 'AI review failed';
-              await prisma.aIReview.upsert({
-                where: { submissionId },
-                create: {
-                  submissionId, timeComplexity: '', spaceComplexity: '',
-                  readabilityScore: 0, edgeCaseScore: 0, namingScore: 0,
-                  suggestedImprovement: '', errorType: 'ai_review_error', errorMessage: msg,
-                },
-                update: { errorType: 'ai_review_error', errorMessage: msg },
-              });
-            });
+            .catch(() => {});
         }
 
         return { status, testResults };
