@@ -45,7 +45,7 @@ export class PistonService {
   async execute(
     files: Record<string, string>,
     language: string,
-  ): Promise<{ results: any[]; error?: string; errorType?: string }> {
+  ): Promise<{ results: any[]; error?: string; errorType?: string; memory?: number; compileWarnings?: string }> {
     const langInfo = LANG_MAP[language];
     if (!langInfo) {
       return { results: [], error: `Unsupported language: ${language}`, errorType: 'runtime_error' };
