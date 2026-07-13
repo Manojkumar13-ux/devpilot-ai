@@ -170,9 +170,14 @@ export class Judge0Service {
   }
 
   private buildJava(files: Record<string, string>, testCasesJson?: string): string {
-    const solutionCode = (files['Solution.java'] || '').replace('class Solution', 'class Solution');
+    const solutionCode = (files['Solution.java'] || '').replace('public class Solution', 'class Solution');
     const runnerCode = files['Runner.java'] || '';
-    const merged = `import java.util.*;\nimport java.io.*;\n\n${solutionCode}\n\n${runnerCode.replace(/^import\s+.*;$/gm, '')}`;
+    const imports = `import java.util.*;\nimport java.io.*;\nimport java.nio.file.*;`;
+    const modifiedRunner = runnerCode
+      .replace(/^import\s+.*;$/gm, '')
+      .replace('public class Runner', 'public class Main')
+      .trim();
+    const merged = `${imports}\n\n${solutionCode}\n\n${modifiedRunner}`;
     if (testCasesJson) {
       return this.inlineTestCases(merged, 'java', testCasesJson);
     }
