@@ -488,14 +488,12 @@ function generateJavaRunner(
     }
     if (c == '[') {
       List<Object> list = new ArrayList<>(); i++;
-      boolean inStr = false;
-      while (i < s.length() && !(s.charAt(i) == ']' && !inStr)) {
-        if (s.charAt(i) == '"' && (i == 0 || s.charAt(i-1) != '\\\\')) inStr = !inStr;
-        if (inStr) { i++; continue; }
-        ParseResult pr = parseValue(s, i);
-        if (pr.value != null) list.add(pr.value);
-        i = pr.end;
+      while (i < s.length() && s.charAt(i) != ']') {
         while (i < s.length() && (s.charAt(i) == ',' || s.charAt(i) == ' ')) i++;
+        if (i >= s.length() || s.charAt(i) == ']') break;
+        ParseResult pr = parseValue(s, i);
+        list.add(pr.value);
+        i = pr.end;
       }
       return new ParseResult(list, i + 1);
     }
@@ -684,7 +682,7 @@ ${sharedHelpers}
 `;
     return {
       files: {
-        "Solution.java": code.replace("public class " + className, "class " + className),
+        "Solution.java": code.replace(/\bpublic\s+class\s+\w+/g, "class " + className),
         "Runner.java": harness,
         "testcases.json": testCasesJson,
       },
@@ -763,7 +761,7 @@ ${sharedHelpers}
 `;
   return {
     files: {
-      "Solution.java": code.replace("public class Solution", "class " + className),
+      "Solution.java": code.replace(/\bpublic\s+class\s+\w+/g, "class " + className),
       "Runner.java": harness,
       "testcases.json": testCasesJson,
     },
@@ -797,8 +795,8 @@ function generateCppRunner(
     }
     if (typeof val === "string") return `string ${name} = inputVal["${name}"];`;
     if (typeof val === "boolean") return `bool ${name} = inputVal["${name}"] == "true";`;
-    // Guard against empty string — stoi("") throws std::invalid_argument
-    return `int ${name} = inputVal["${name}"].empty() ? 0 : stoi(inputVal["${name}"]);`;
+    if (val === null) return `int ${name} = 0;`;
+    return `int ${name} = inputVal["${name}"].empty() || inputVal["${name}"] == "null" ? 0 : stoi(inputVal["${name}"]);`;
   }
 
   function serResultFromExpected(expected: string): string {
@@ -1259,7 +1257,7 @@ function generateTsRunner(
       .replace(/export\s+(default\s+)?let/g, 'let')
       .replace(/export\s+(default\s+)?var/g, 'var')
       .replace(/:\s*(?:ReadonlyArray|Array|Map|Set|Promise|Record|Partial|Required|Readonly|Pick|Omit)\s*<[^>]+>/gi, '')
-      .replace(/:?\s*:\s*\w+\s*\[\s*\]/g, '[]')
+      .replace(/:?\s*:\s*\w+\s*\[\s*\]/g, '')
       .replace(/:?\s*:\s*\w+/g, '')
       .replace(/^(\s*)public\s+/gm, '$1')
       .replace(/^(\s*)private\s+/gm, '$1')
@@ -1267,6 +1265,7 @@ function generateTsRunner(
       .replace(/^(\s*)readonly\s+/gm, '$1')
       .replace(/\s+as\s+\w+/g, '')
       .replace(/\s*\|\s*(?:null|undefined)\b/g, '')
+      .replace(/<[A-Z]\w*(?:\s*,\s*[A-Z]\w*)*\s*>\s*\(/g, '(')
       .replace(/(\w+)\s*<\s*\w+\s*>\s*\(/g, '$1(');
 
   const cleaned = stripTypes(code);
@@ -1463,8 +1462,8 @@ InputVals parseSimpleJson(const char* s) {
       iv.strVals[ki][vp] = 0; iv.isStr[ki] = 1; s++;
     } else if (*s == '[') {
       if (*(s+1) == '"') {
-        // String array
-        s++; iv.isStr[ki] = 1; iv.valLens[ki] = 0; int strIdx = 0;
+        // String array — stores first element (string array as input is uncommon in C)
+        s++; iv.isStr[ki] = 1; iv.valLens[ki] = 0;
         while (*s && *s != ']') {
           while (*s && *s != '"') s++;
           if (*s == '"') {
@@ -1472,8 +1471,7 @@ InputVals parseSimpleJson(const char* s) {
             while (*s && *s != '"') { if (*s == '\\\\' && *(s+1)) s++; iv.strVals[ki][vp++] = *s; s++; }
             iv.strVals[ki][vp] = 0;
             if (*s == '"') s++;
-            iv.valLens[ki] = strIdx;
-            strIdx++;
+            iv.valLens[ki]++;
             while (*s && (*s == ',' || *s == ' ')) s++;
           }
         }
