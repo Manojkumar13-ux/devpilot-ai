@@ -2,6 +2,7 @@
 // npx tsx infrastructure/scripts/validate-runners.ts
 
 import { generateSubmitRunner } from '../../apps/backend/src/services/runner.js';
+import { getProblemMetadata } from '../../apps/backend/src/services/problem-metadata.js';
 import solutionData from './validation-solutions.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -137,7 +138,12 @@ function runValidation(): void {
       totalTests++;
 
       try {
-        const runner = generateSubmitRunner(lang, code, testCases);
+        const meta = getProblemMetadata(slug);
+        if (!meta) {
+          allResults.push({ slug, language: lang, difficulty, pass: false, error: 'No metadata found' });
+          continue;
+        }
+        const runner = generateSubmitRunner(lang, code, testCases, meta);
 
         const fileCount = Object.keys(runner.files).length;
         let allFilesNonEmpty = true;

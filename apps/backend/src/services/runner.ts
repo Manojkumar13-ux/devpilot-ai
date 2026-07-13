@@ -1,4 +1,5 @@
 import type { TestResult } from "@devpilot/shared";
+import type { ProblemMetadata } from "./problem-metadata.js";
 
 interface TestCaseData {
   input: string;
@@ -10,11 +11,12 @@ const WORK_DIR = '/tmp';
 function extractFunctionName(code: string, language: string): string | null {
   switch (language) {
     case "python": {
-      const pyDefs = [...code.matchAll(/^def\s+(\w+)/gm)].filter(m => !m[1].startsWith('_'));
-      return pyDefs.length > 0 ? pyDefs[pyDefs.length - 1][1] : null;
+      const topLevel = [...code.matchAll(/^def\s+(\w+)/gm)].filter(m => !m[1].startsWith('_'));
+      if (topLevel.length > 0) return topLevel[topLevel.length - 1][1];
+      const classMethods = [...code.matchAll(/^ {4}def\s+(\w+)/gm)].filter(m => !m[1].startsWith('_'));
+      return classMethods.length > 0 ? classMethods[classMethods.length - 1][1] : null;
     }
     case "java": {
-      // Only match public methods to avoid picking up private/package-private helpers (dfs, validate, merge)
       const methods = [...code.matchAll(/public\s+\S+\s+(\w+)\s*\([^)]*\)\s*(?:\{|throws)/g)];
       const skip = new Set(['main', 'toString', 'hashCode', 'equals', 'Solution', 'ListNode', 'TreeNode', 'Node']);
       const candidates = methods.filter(m => !skip.has(m[1]));
@@ -41,22 +43,26 @@ function extractFunctionName(code: string, language: string): string | null {
 export function generateSubmitRunner(
   language: string,
   userCode: string,
-  testCases: TestCaseData[]
+  testCases: TestCaseData[],
+  meta?: ProblemMetadata
 ): { files: Record<string, string>; command: string } {
-  const fnName = extractFunctionName(userCode, language) ?? "solution";
+  // Python uses snake_case from user code; Java/C++/C use metadata camelCase
+  const fnName = (meta && language !== 'python')
+    ? meta.methodName
+    : (extractFunctionName(userCode, language) ?? "solution");
   const testCasesJson = JSON.stringify(testCases);
 
   switch (language) {
     case "python":
-      return generatePyRunner(userCode, fnName, testCasesJson);
+      return generatePyRunner(userCode, fnName, testCasesJson, meta);
     case "java":
-      return generateJavaRunner(userCode, fnName, testCasesJson);
+      return generateJavaRunner(userCode, fnName, testCasesJson, meta);
     case "cpp":
-      return generateCppRunner(userCode, fnName, testCasesJson);
+      return generateCppRunner(userCode, fnName, testCasesJson, meta);
     case "c":
-      return generateCRunner(userCode, fnName, testCasesJson);
+      return generateCRunner(userCode, fnName, testCasesJson, meta);
     default:
-      return generatePyRunner(userCode, fnName, testCasesJson);
+      return generatePyRunner(userCode, fnName, testCasesJson, meta);
   }
 }
 
@@ -66,22 +72,25 @@ export function generateSubmitRunner(
 function generatePyRunner(
   code: string,
   fn: string,
-  testCasesJson: string
+  testCasesJson: string,
+  meta?: ProblemMetadata
 ): { files: Record<string, string>; command: string } {
-  const classMatch = code.match(/^class\s+(?!(?:ListNode|TreeNode|Node)\b)(\w+)/m);
-  const className = classMatch ? classMatch[1] : '';
-
-  // Detect design problem: test case input has ops/args format
-  let isDesignProblem = false;
-  try {
-    const tcs = JSON.parse(testCasesJson);
-    if (tcs.length > 0) {
-      const firstInput = JSON.parse(tcs[0].input);
-      isDesignProblem = firstInput && typeof firstInput === 'object' && 'ops' in firstInput && 'args' in firstInput;
-    }
-  } catch {}
-
-  // Design/class problems (LRU Cache, Min Stack, MyQueue, etc.) — ops/args pattern
+  // Metadata-driven: className from metadata only if code defines it or design problem
+  const className = meta
+    ? (code.includes(`class ${meta.className}`) || meta.isDesign ? meta.className : '')
+    : (code.match(/^class\s+(?!(?:ListNode|TreeNode|Node)\b)(\w+)/m)?.[1] ?? '');
+  const isDesignProblem = meta ? meta.isDesign : (() => {
+    try {
+      const tcs = JSON.parse(testCasesJson);
+      if (tcs.length > 0) {
+        const fi = JSON.parse(tcs[0].input);
+        return fi && typeof fi === 'object' && 'ops' in fi && 'args' in fi;
+      }
+    } catch {}
+    return false;
+  })();
+  const hasListNode = meta ? meta.helperClasses.includes('ListNode') : code.includes('class ListNode');
+  const hasTreeNode = meta ? meta.helperClasses.includes('TreeNode') : code.includes('class TreeNode');
   if (isDesignProblem) {
     const runner = `
 import json, time, sys
@@ -114,10 +123,6 @@ print(json.dumps({"results": results}))
 `;
     return { files: { "runner.py": runner }, command: `python3 ${WORK_DIR}/runner.py` };
   }
-
-  // Detect if user code defines ListNode/TreeNode for automatic array conversion
-  const hasListNode = code.includes('class ListNode');
-  const hasTreeNode = code.includes('class TreeNode');
 
   const listHelper = hasListNode ? `
 def _arr_to_list(arr, cls):
@@ -171,8 +176,11 @@ for tc in test_cases:
     try:
         inp = json.loads(tc["input"])
         sol = ${className}()
-        ${hasListNode || hasTreeNode ? `inp = _convert(inp, sol.${fn})` : ''}
-        result = sol.${fn}(**inp)
+        _method = getattr(sol, "${fn}", None)
+        if _method is None:
+            _method = next((getattr(sol, m) for m in dir(sol) if not m.startswith('_') and callable(getattr(sol, m))), None)
+        ${hasListNode || hasTreeNode ? `inp = _convert(inp, _method)` : ''}
+        result = _method(**inp)
         elapsed = (time.time() - start) * 1000
         pass_val = json.dumps(result, default=str) == json.dumps(json.loads(tc["expectedOutput"]), default=str)
         results.append({"pass": pass_val, "runtime": round(elapsed, 2), "memory": 0, "error": None, "expected": tc["expectedOutput"], "actual": json.dumps(result, default=str)})
@@ -210,18 +218,19 @@ print(json.dumps({"results": results}))
 function generateJavaRunner(
   code: string,
   fn: string,
-  testCasesJson: string
+  testCasesJson: string,
+  meta?: ProblemMetadata
 ): { files: Record<string, string>; command: string } {
-  const classMatch = code.match(/(?:public\s+)?class\s+(\w+)/);
-  const className = classMatch ? classMatch[1] : 'Solution';
+  const className = meta ? meta.className
+    : (code.match(/(?:public\s+)?class\s+(\w+)/)?.[1] ?? 'Solution');
 
-  // Inject ListNode/TreeNode/Node class definitions if referenced but not defined in user code
-  const hasListNode = /\bclass\s+ListNode\b/.test(code);
-  const hasTreeNode = /\bclass\s+TreeNode\b/.test(code);
-  const hasNodeCls = /\bclass\s+Node\b/.test(code) && !hasListNode;
-  const refListNode = !hasListNode && /\bListNode\b/.test(code);
-  const refTreeNode = !hasTreeNode && /\bTreeNode\b/.test(code);
-  const refNode = !hasNodeCls && !hasListNode && /\bNode\b/.test(code);
+  // Metadata-driven helper injection
+  const hasListNode = meta ? meta.helperClasses.includes('ListNode') : /\bclass\s+ListNode\b/.test(code);
+  const hasTreeNode = meta ? meta.helperClasses.includes('TreeNode') : /\bclass\s+TreeNode\b/.test(code);
+  const hasNodeCls = meta ? meta.helperClasses.includes('Node') : (/\bclass\s+Node\b/.test(code) && !hasListNode);
+  const refListNode = meta ? hasListNode : (!hasListNode && /\bListNode\b/.test(code));
+  const refTreeNode = meta ? hasTreeNode : (!hasTreeNode && /\bTreeNode\b/.test(code));
+  const refNode = meta ? hasNodeCls : (!hasNodeCls && !hasListNode && /\bNode\b/.test(code));
   let injectedClasses = '';
   if (refListNode) injectedClasses += `
 class ListNode {
@@ -253,14 +262,16 @@ class Node {
 `;
   if (injectedClasses) code = injectedClasses + code;
 
-  let isDesignProblem = false;
-  try {
-    const tcs = JSON.parse(testCasesJson);
-    if (tcs.length > 0) {
-      const firstInput = JSON.parse(tcs[0].input);
-      isDesignProblem = firstInput && typeof firstInput === 'object' && 'ops' in firstInput && 'args' in firstInput;
-    }
-  } catch {}
+  const isDesignProblem = meta ? meta.isDesign : (() => {
+    try {
+      const tcs = JSON.parse(testCasesJson);
+      if (tcs.length > 0) {
+        const fi = JSON.parse(tcs[0].input);
+        return fi && typeof fi === 'object' && 'ops' in fi && 'args' in fi;
+      }
+    } catch {}
+    return false;
+  })();
 
   // ---- Shared Helpers (injected into every Java runner) ----
   const sharedHelpers = `
@@ -691,29 +702,32 @@ ${sharedHelpers}
 function generateCppRunner(
   code: string,
   fn: string,
-  testCasesJson: string
+  testCasesJson: string,
+  meta?: ProblemMetadata
 ): { files: Record<string, string>; command: string } {
+  const hasListNode = meta ? meta.helperClasses.includes('ListNode')
+    : /struct\s+ListNode|class\s+ListNode/.test(code);
+  const hasTreeNode = meta ? meta.helperClasses.includes('TreeNode')
+    : /struct\s+TreeNode|class\s+TreeNode/.test(code);
+
   const testCases = JSON.parse(testCasesJson);
   const firstInput = testCases.length > 0 ? JSON.parse(testCases[0].input) : {};
   const argKeys = Object.keys(firstInput);
   const argVals = Object.values(firstInput);
 
-  const classMatch = code.match(/(?:class\s+)(\w+)/);
-  const className = classMatch ? classMatch[1] : 'Solution';
+  const className = meta ? meta.className
+    : (code.match(/(?:class\s+)(\w+)/)?.[1] ?? 'Solution');
 
-  // Detect design problem
-  let isDesignProblem = false;
-  try {
-    const tcs = JSON.parse(testCasesJson);
-    if (tcs.length > 0) {
-      const fi = JSON.parse(tcs[0].input);
-      isDesignProblem = fi && typeof fi === 'object' && 'ops' in fi && 'args' in fi;
-    }
-  } catch {}
-
-  // Detect ListNode/TreeNode in user code
-  const hasListNode = /struct\s+ListNode|class\s+ListNode/.test(code);
-  const hasTreeNode = /struct\s+TreeNode|class\s+TreeNode/.test(code);
+  const isDesignProblem = meta ? meta.isDesign : (() => {
+    try {
+      const tcs = JSON.parse(testCasesJson);
+      if (tcs.length > 0) {
+        const fi = JSON.parse(tcs[0].input);
+        return fi && typeof fi === 'object' && 'ops' in fi && 'args' in fi;
+      }
+    } catch {}
+    return false;
+  })();
 
   // Parse method parameter types from function signature in user code
   // Look for: "returnType methodName(paramType1 param1, paramType2 param2)"
@@ -1307,25 +1321,26 @@ int main() {
 function generateCRunner(
   code: string,
   fn: string,
-  testCasesJson: string
+  testCasesJson: string,
+  meta?: ProblemMetadata
 ): { files: Record<string, string>; command: string } {
   const testCases = JSON.parse(testCasesJson);
   const firstInput = testCases.length > 0 ? JSON.parse(testCases[0].input) : {};
   const argKeys = Object.keys(firstInput);
   const argVals = Object.values(firstInput);
 
-  // Detect design problem
-  let isDesignProblem = false;
-  try {
-    const tcs = JSON.parse(testCasesJson);
-    if (tcs.length > 0) {
-      const fi = JSON.parse(tcs[0].input);
-      isDesignProblem = fi && typeof fi === 'object' && 'ops' in fi && 'args' in fi;
-    }
-  } catch {}
+  const isDesignProblem = meta ? meta.isDesign : (() => {
+    try {
+      const tcs = JSON.parse(testCasesJson);
+      if (tcs.length > 0) {
+        const fi = JSON.parse(tcs[0].input);
+        return fi && typeof fi === 'object' && 'ops' in fi && 'args' in fi;
+      }
+    } catch {}
+    return false;
+  })();
 
-  const classMatch = code.match(/(?:class\s+|struct\s+)(\w+)/);
-  const className = classMatch ? classMatch[1] : 'Solution';
+  const className = meta ? meta.className : (code.match(/(?:class\s+|struct\s+)(\w+)/)?.[1] ?? 'Solution');
 
   // Parse parameter types from function signature
   function parseParamTypes(c: string): Map<string, string> {
@@ -1389,9 +1404,11 @@ function generateCRunner(
   const isStringReturn = firstExpected.startsWith('"');
   const isBoolReturn = firstExpected === 'true' || firstExpected === 'false';
 
-  // Detect struct definitions in user code
-  const hasListNode = /struct\s+ListNode/.test(code);
-  const hasTreeNode = /struct\s+TreeNode/.test(code);
+  // Metadata-driven helper detection
+  const hasListNode = meta ? meta.helperClasses.includes('ListNode')
+    : /struct\s+ListNode/.test(code);
+  const hasTreeNode = meta ? meta.helperClasses.includes('TreeNode')
+    : /struct\s+TreeNode/.test(code);
 
   const listStructDef = hasListNode ? '' : `
 struct ListNode {

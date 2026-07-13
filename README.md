@@ -28,7 +28,7 @@ interviewer would. DevPilot fills that gap with:
                ┌─────▼─────┐
                │   Docker   │
                │  Sandbox   │
-               │ (8 langs)  │
+                │ (4 langs)  │
                └───────────┘
 ```
 
@@ -65,9 +65,9 @@ pnpm dev
 | Feature | Status | Details |
 |---|---|---|
 | 30 coding problems | ✅ | Arrays, Strings, Trees, DP, Graphs |
-| 8 languages | ✅ | JS, TS, Python, Java, C++, C, Go, Rust |
+| 4 languages | ✅ | Python, Java, C++, C |
 | Monaco Editor | ✅ | Syntax highlighting, auto-complete |
-| Docker sandbox | ✅ | Isolated execution, 8 runtimes |
+| Docker sandbox | ✅ | Isolated execution, 4 runtimes |
 | AI code review | ✅ | Big O, readability, edge cases, naming |
 | AI follow-up interview | ✅ | Code-grounded question + scored answer |
 | Dashboard + analytics | ✅ | Recharts, topic breakdown, streaks |
@@ -130,7 +130,7 @@ methodology, 5 documented failure cases, and cost projections.
 - [ ] Switch to `gpt-4o-mini` for AI review to reduce cost by ~10×
 - [ ] Add WebSocket-based real-time submission progress
 - [ ] Build a "mock interview" mode with timed problem sets
-- [ ] Add C# / Kotlin / Swift runner support
+- [ ] Add C# / Kotlin / Swift runner support (requires writing generators)
 - [ ] Persist AI call logs to a DB table for historical cost analysis
 - [ ] Replace the naive Docker sandbox with gVisor or Firecracker
 - [ ] Add Prometheus metrics endpoint + Grafana dashboard

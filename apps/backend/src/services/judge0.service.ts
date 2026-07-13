@@ -24,6 +24,24 @@ const LANG_IDS: Record<string, number> = {
 
 const JUDGE0_API = process.env.JUDGE0_API_URL || 'https://ce.judge0.com';
 
+/** Judge0 status codes */
+const STATUS = {
+  IN_QUEUE: 1,
+  PROCESSING: 2,
+  ACCEPTED: 3,
+  WRONG_ANSWER: 4,
+  TIME_LIMIT_EXCEEDED: 5,
+  COMPILATION_ERROR: 6,
+  RUNTIME_ERROR_SIGSEGV: 7,
+  RUNTIME_ERROR_SIGXFSZ: 8,
+  RUNTIME_ERROR_SIGFPE: 9,
+  RUNTIME_ERROR_SIGABRT: 10,
+  RUNTIME_ERROR_NZEC: 11,
+  RUNTIME_ERROR_OTHER: 12,
+  INTERNAL_ERROR: 13,
+  EXEC_FORMAT_ERROR: 14,
+} as const;
+
 export class Judge0Service {
   async execute(
     files: Record<string, string>,
@@ -56,46 +74,48 @@ export class Judge0Service {
       }
 
       const result = await res.json() as Judge0Response;
+      const statusId = result.status.id;
 
-      if (result.status.id === 3) {
-        // Compilation succeeded (exit 0), execution ran — parse stdout
-        const compileOut = result.compile_output || '';
+      // Status 3 = Accepted (compile + execute succeeded)
+      if (statusId === STATUS.ACCEPTED) {
+        // Compiler warnings in compile_output are NOT failures
+        if (result.compile_output) {
+          logger.warn({ compileOutput: result.compile_output }, 'Compiler warning');
+        }
         try {
           const parsed = JSON.parse(result.stdout || '{}');
-          if (compileOut) {
-            return { results: parsed.results || [], memory: result.memory || 0, compileWarnings: compileOut };
-          }
-          return { results: parsed.results || [], memory: result.memory || 0 };
+          return {
+            results: parsed.results || [],
+            memory: result.memory || 0,
+            compileWarnings: result.compile_output || undefined,
+          };
         } catch {
           logger.warn({ stdout: result.stdout }, 'Failed to parse Judge0 output as JSON');
           return { results: [], error: 'Failed to parse execution output', errorType: 'runtime_error' };
         }
       }
 
-      // Non-success status: attempt to parse stdout as a fallback — some Judge0 CE
-      // versions return status 6 (compilation error) even when javac exits 0 with warnings.
-      // If stdout has valid results, treat it as successful execution with warnings.
+      // If stdout has valid results despite non-zero exit, treat as success with warnings
       if (result.stdout) {
         try {
           const parsed = JSON.parse(result.stdout);
           if (parsed && Array.isArray(parsed.results)) {
             return { results: parsed.results, memory: result.memory || 0, compileWarnings: result.compile_output || '' };
           }
-        } catch { /* invalid JSON — fall through to real error handling */ }
+        } catch { /* fall through */ }
       }
 
-      const statusId = result.status.id;
       const compileOut = result.compile_output || '';
       const stdErr = result.stderr || '';
 
       let errorType = 'runtime_error';
-      if (statusId === 5) {
+      if (statusId === STATUS.TIME_LIMIT_EXCEEDED) {
         errorType = 'timeout_error';
-      } else if (statusId === 6) {
+      } else if (statusId === STATUS.COMPILATION_ERROR) {
         errorType = 'compilation_error';
-      } else if (statusId >= 7 && statusId <= 12) {
+      } else if (statusId >= STATUS.RUNTIME_ERROR_SIGSEGV && statusId <= STATUS.RUNTIME_ERROR_OTHER) {
         errorType = 'runtime_error';
-      } else if (statusId >= 13) {
+      } else if (statusId >= STATUS.INTERNAL_ERROR) {
         errorType = 'internal_error';
       }
 
@@ -112,9 +132,6 @@ export class Judge0Service {
     const testCasesJson = files['testcases.json'];
 
     switch (language) {
-      case 'javascript':
-      case 'typescript':
-        return this.buildSingleFile(files, 'runner.js', testCasesJson);
       case 'python':
         return this.buildSingleFile(files, 'runner.py', testCasesJson);
       case 'java':
@@ -123,10 +140,6 @@ export class Judge0Service {
         return this.buildSingleFile(files, 'runner.cpp', testCasesJson);
       case 'c':
         return this.buildSingleFile(files, 'runner.c', testCasesJson);
-      case 'go':
-        return this.buildGo(files, testCasesJson);
-      case 'rust':
-        return this.buildSingleFile(files, 'runner.rs', testCasesJson);
       default:
         return Object.values(files).join('\n');
     }
@@ -149,16 +162,6 @@ export class Judge0Service {
         );
       case 'c':
         return this.inlineTestCasesC(source, json);
-      case 'go':
-        return source.replace(
-          /data\s*,\s*err\s*:=\s*os\.ReadFile\s*\([^)]*\)/,
-          'data := []byte(`' + json + '`)\nvar err error'
-        );
-      case 'rust':
-        return source.replace(
-          /let\s+\w+\s*=\s*fs::read_to_string\s*\([^;]*\)\.unwrap_or_default\(\)/,
-          `let content = "${json.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}".to_string()`
-        );
       case 'java':
         return source.replace(
           /String\s+content\s*=\s*new\s+String\s*\([^;]*\)\s*;/,
@@ -213,46 +216,11 @@ export class Judge0Service {
     }
     return merged;
   }
-
-  private buildGo(files: Record<string, string>, testCasesJson?: string): string {
-    const parts: string[] = [];
-    const seenImports = new Set<string>();
-    for (const [name, content] of Object.entries(files)) {
-      if (name === 'testcases.json') continue;
-      const lines = content.split('\n');
-      const filtered: string[] = [];
-      for (const line of lines) {
-        if (/^package\s+main/.test(line)) continue;
-        if (/^import\s*\(/.test(line)) {
-          let inImport = true;
-          filtered.push(line);
-          continue;
-        }
-        if (/^\s+"[^"]+"/.test(line) || /^\s+\.\s+"[^"]+"/.test(line)) {
-          const trimmed = line.trim();
-          if (seenImports.has(trimmed)) continue;
-          seenImports.add(trimmed);
-          filtered.push(line);
-          continue;
-        }
-        if (/^\s*\)/.test(line) && line.includes('import')) continue;
-        filtered.push(line);
-      }
-      parts.push(filtered.join('\n'));
-    }
-    const merged = `package main\n\n${parts.join('\n')}`;
-    if (testCasesJson) {
-      return this.inlineTestCases(merged, 'go', testCasesJson);
-    }
-    return merged;
-  }
 }
 
 function languageForInlining(filename: string): string {
   if (filename.endsWith('.cpp')) return 'cpp';
   if (filename.endsWith('.c')) return 'c';
-  if (filename.endsWith('.rs')) return 'rust';
-  if (filename.endsWith('.go')) return 'go';
   if (filename.endsWith('.java')) return 'java';
   return '';
 }

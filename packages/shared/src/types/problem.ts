@@ -7,7 +7,7 @@ export type ProblemCategory =
   | "Dynamic Programming"
   | "Graphs";
 
-export const SUPPORTED_LANGUAGES = ["javascript", "python", "java", "cpp", "go"] as const;
+export const SUPPORTED_LANGUAGES = ["python", "java", "cpp", "c"] as const;
 export type Language = (typeof SUPPORTED_LANGUAGES)[number];
 
 export interface Problem {

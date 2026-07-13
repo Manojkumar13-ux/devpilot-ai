@@ -553,7 +553,7 @@ function ProblemFormModal({ problem, onClose, onSaved, onToast }: {
           <div>
             <label className="block text-xs font-medium text-[#a0a0b8] mb-1">Starter Code (JSON)</label>
             <textarea rows={3} value={form.starterCode} onChange={e => setForm({ ...form, starterCode: e.target.value })}
-              placeholder='{"javascript": "function solve() { }"}'
+              placeholder='{"python": "def solve(): pass"}'
               className="w-full px-3 py-2 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white text-sm focus:outline-none focus:border-[#6c63ff] font-mono" />
           </div>
           <div>
