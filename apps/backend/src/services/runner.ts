@@ -491,9 +491,11 @@ function generateJavaRunner(
       while (i < s.length() && s.charAt(i) != ']') {
         while (i < s.length() && (s.charAt(i) == ',' || s.charAt(i) == ' ')) i++;
         if (i >= s.length() || s.charAt(i) == ']') break;
+        int prev = i;
         ParseResult pr = parseValue(s, i);
         list.add(pr.value);
         i = pr.end;
+        if (i == prev) i++;
       }
       return new ParseResult(list, i + 1);
     }
