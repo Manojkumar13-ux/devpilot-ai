@@ -21,8 +21,6 @@ const LANGUAGES: { value: string; label: string; color: string; executable: bool
   { value: "java", label: "Java", color: "text-orange-400", executable: true },
   { value: "cpp", label: "C++", color: "text-blue-500", executable: true },
   { value: "c", label: "C", color: "text-blue-300", executable: true },
-  { value: "go", label: "Go", color: "text-cyan-400", executable: true },
-  { value: "rust", label: "Rust", color: "text-orange-500", executable: true },
 ];
 
 export default function EditorToolbar({

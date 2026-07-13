@@ -16,9 +16,8 @@ import type {
 } from "@devpilot/shared";
 
 const LANGUAGE_MONACO_MAP: Record<string, string> = {
-  javascript: "javascript", typescript: "typescript", python: "python", java: "java",
-  c: "c", cpp: "cpp", csharp: "csharp", go: "go", rust: "rust", kotlin: "kotlin",
-  swift: "swift", php: "php", ruby: "ruby", dart: "dart",
+  python: "python", java: "java",
+  c: "c", cpp: "cpp",
 };
 
 const STORAGE_PREFIX = "devpilot:draft:";

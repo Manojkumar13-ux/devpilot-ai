@@ -22,7 +22,7 @@ interface SubmissionRow {
   aiReview: { readabilityScore: number; edgeCaseScore: number; namingScore: number } | null;
 }
 
-const LANGUAGES = ["All", "python", "java", "cpp", "c", "go", "rust"];
+const LANGUAGES = ["All", "python", "java", "cpp", "c"];
 
 const STATUS_OPTIONS = [
   { label: "All", value: "" },

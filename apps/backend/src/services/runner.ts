@@ -7,36 +7,8 @@ interface TestCaseData {
 
 const WORK_DIR = '/tmp';
 
-const JS_RESERVED = new Set([
-  'var','let','const','function','class','return','if','else','for','while','do',
-  'switch','case','break','continue','new','this','typeof','instanceof','void',
-  'delete','try','catch','finally','throw','async','await','yield','import','export',
-  'from','of','in','true','false','null','undefined'
-]);
-
 function extractFunctionName(code: string, language: string): string | null {
   switch (language) {
-    case "javascript":
-    case "typescript": {
-      const patterns = [
-        /function\s+(\w+)/g,
-        /(?:var|let|const)\s+(\w+)\s*=\s*(?:function|\(|async)/g,
-        /(\w+)\s*=\s*\([^)]*\)\s*=>/g,
-        /(\w+)\s*\([^)]*\)\s*\{/g,
-      ];
-      const candidates: { name: string; index: number }[] = [];
-      for (const re of patterns) {
-        let m: RegExpExecArray | null;
-        while ((m = re.exec(code)) !== null) {
-          if (m[1] && !JS_RESERVED.has(m[1])) {
-            candidates.push({ name: m[1], index: m.index });
-          }
-        }
-      }
-      if (candidates.length === 0) return null;
-      candidates.sort((a, b) => b.index - a.index);
-      return candidates[0].name;
-    }
     case "python":
       return code.match(/def\s+(\w+)/)?.[1] ?? null;
     case "java": {
@@ -58,10 +30,6 @@ function extractFunctionName(code: string, language: string): string | null {
       const m = code.match(/(\w+)\s*\([^)]*\)\s*\{/);
       return m?.[1] ?? null;
     }
-    case "go":
-      return code.match(/func\s+(\w+)/)?.[1] ?? null;
-    case "rust":
-      return code.match(/fn\s+(\w+)/)?.[1] ?? null;
     default:
       return null;
   }
@@ -76,10 +44,6 @@ export function generateSubmitRunner(
   const testCasesJson = JSON.stringify(testCases);
 
   switch (language) {
-    case "javascript":
-      return generateJsRunner(userCode, fnName, testCasesJson);
-    case "typescript":
-      return generateTsRunner(userCode, fnName, testCasesJson);
     case "python":
       return generatePyRunner(userCode, fnName, testCasesJson);
     case "java":
@@ -88,148 +52,12 @@ export function generateSubmitRunner(
       return generateCppRunner(userCode, fnName, testCasesJson);
     case "c":
       return generateCRunner(userCode, fnName, testCasesJson);
-    case "go":
-      return generateGoRunner(userCode, fnName, testCasesJson);
-    case "rust":
-      return generateRustRunner(userCode, fnName, testCasesJson);
     default:
-      return generateJsRunner(userCode, fnName, testCasesJson);
+      return generatePyRunner(userCode, fnName, testCasesJson);
   }
 }
 
-/* ---------- JavaScript ---------- */
-function generateJsRunner(
-  code: string,
-  fn: string,
-  testCasesJson: string
-): { files: Record<string, string>; command: string } {
-  let isDesignProblem = false;
-  let className = '';
-  try {
-    const tcs = JSON.parse(testCasesJson);
-    if (tcs.length > 0) {
-      const firstInput = JSON.parse(tcs[0].input);
-      isDesignProblem = firstInput && typeof firstInput === 'object' && 'ops' in firstInput && 'args' in firstInput;
-    }
-    const classMatch = code.match(/(?:class\s+(\w+))/);
-    if (classMatch) className = classMatch[1];
-  } catch {}
 
-  if (isDesignProblem) {
-    const runner = `
-const fs = require('fs');
-${code}
-const testCases = ${testCasesJson};
-const deepEq = (a, b) => {
-  if (a === b) return true;
-  if (a == null || b == null) return false;
-  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => deepEq(v, b[i]));
-  if (typeof a === 'object' && typeof b === 'object') {
-    const ka = Object.keys(a);
-    return ka.length === Object.keys(b).length && ka.every(k => deepEq(a[k], b[k]));
-  }
-  return false;
-};
-const results = [];
-for (const tc of testCases) {
-  const start = process.hrtime.bigint();
-  try {
-    const inp = JSON.parse(tc.input);
-    const ops = inp.ops;
-    const argsList = inp.args;
-    let obj = null;
-    const out = [];
-    for (let i = 0; i < ops.length; i++) {
-      const op = ops[i];
-      const arg = argsList[i];
-      if (op === "${className}") {
-        obj = new ${className}(...arg);
-        out.push(null);
-      } else {
-        const val = obj[op](...arg);
-        out.push(val !== undefined ? val : null);
-      }
-    }
-    const end = process.hrtime.bigint();
-    const rt = Number(end - start) / 1e6;
-    const pass = deepEq(out, JSON.parse(tc.expectedOutput));
-    results.push({ pass, runtime: Math.round(rt * 100) / 100, memory: 0, error: null, expected: tc.expectedOutput, actual: JSON.stringify(out) });
-  } catch (e) {
-    results.push({ pass: false, runtime: 0, memory: 0, error: e.message || String(e), expected: tc.expectedOutput, actual: null });
-  }
-}
-process.stdout.write(JSON.stringify({ results }));
-`;
-    return { files: { "runner.js": runner }, command: `node ${WORK_DIR}/runner.js` };
-  }
-
-  if (className) {
-    const runner = `
-const fs = require('fs');
-${code}
-const testCases = ${testCasesJson};
-const deepEq = (a, b) => {
-  if (a === b) return true;
-  if (a == null || b == null) return false;
-  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => deepEq(v, b[i]));
-  if (typeof a === 'object' && typeof b === 'object') {
-    const ka = Object.keys(a);
-    return ka.length === Object.keys(b).length && ka.every(k => deepEq(a[k], b[k]));
-  }
-  return false;
-};
-const results = [];
-for (const tc of testCases) {
-  const start = process.hrtime.bigint();
-  try {
-    const args = Object.values(JSON.parse(tc.input));
-    const sol = new ${className}();
-    const result = sol.${fn}(...args);
-    const end = process.hrtime.bigint();
-    const rt = Number(end - start) / 1e6;
-    const pass = deepEq(result, JSON.parse(tc.expectedOutput));
-    results.push({ pass, runtime: Math.round(rt * 100) / 100, memory: 0, error: null, expected: tc.expectedOutput, actual: JSON.stringify(result) });
-  } catch (e) {
-    results.push({ pass: false, runtime: 0, memory: 0, error: e.message || String(e), expected: tc.expectedOutput, actual: null });
-  }
-}
-process.stdout.write(JSON.stringify({ results }));
-`;
-    return { files: { "runner.js": runner }, command: `node ${WORK_DIR}/runner.js` };
-  }
-
-  const runner = `
-const fs = require('fs');
-${code}
-const testCases = ${testCasesJson};
-const deepEq = (a, b) => {
-  if (a === b) return true;
-  if (a == null || b == null) return false;
-  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => deepEq(v, b[i]));
-  if (typeof a === 'object' && typeof b === 'object') {
-    const ka = Object.keys(a);
-    return ka.length === Object.keys(b).length && ka.every(k => deepEq(a[k], b[k]));
-  }
-  return false;
-};
-const results = [];
-for (const tc of testCases) {
-  const start = process.hrtime.bigint();
-  try {
-    const args = Object.values(JSON.parse(tc.input));
-    const result = ${fn}(...args);
-    const end = process.hrtime.bigint();
-    const rt = Number(end - start) / 1e6;
-    const pass = deepEq(result, JSON.parse(tc.expectedOutput));
-    results.push({ pass, runtime: Math.round(rt * 100) / 100, memory: 0, error: null, expected: tc.expectedOutput, actual: JSON.stringify(result) });
-  } catch (e) {
-    results.push({ pass: false, runtime: 0, memory: 0, error: e.message || String(e), expected: tc.expectedOutput, actual: null });
-  }
-}
-process.stdout.write(JSON.stringify({ results }));
-`;
-  return { files: { "runner.js": runner }, command: `node ${WORK_DIR}/runner.js` };
-}
 
 /* ---------- Python ---------- */
 function generatePyRunner(
@@ -284,11 +112,55 @@ print(json.dumps({"results": results}))
     return { files: { "runner.py": runner }, command: `python3 ${WORK_DIR}/runner.py` };
   }
 
+  // Detect if user code defines ListNode/TreeNode for automatic array conversion
+  const hasListNode = code.includes('class ListNode');
+  const hasTreeNode = code.includes('class TreeNode');
+
+  const listHelper = hasListNode ? `
+def _arr_to_list(arr, cls):
+    if not arr: return None
+    head = cls(arr[0]); cur = head
+    for v in arr[1:]: cur.next = cls(v); cur = cur.next
+    return head
+` : '';
+  const treeHelper = hasTreeNode ? `
+def _arr_to_tree(arr, cls):
+    if not arr or arr[0] is None: return None
+    root = cls(arr[0]); q = [root]; i = 1
+    while q and i < len(arr):
+        node = q.pop(0)
+        if i < len(arr) and arr[i] is not None: node.left = cls(arr[i]); q.append(node.left)
+        i += 1
+        if i < len(arr) and arr[i] is not None: node.right = cls(arr[i]); q.append(node.right)
+        i += 1
+    return root
+` : '';
+  const convertHelper = hasListNode || hasTreeNode ? `
+import inspect
+def _convert(inp, func):
+    try:
+        sig = inspect.signature(func)
+        for name, param in sig.parameters.items():
+            if name not in inp or not isinstance(inp[name], list): continue
+            hint = param.annotation
+            if hint is inspect.Parameter.empty: continue
+            h = str(hint)
+            if hasListNode and 'ListNode' in h:
+                inp[name] = _arr_to_list(inp[name], ListNode)
+            elif hasTreeNode and 'TreeNode' in h:
+                inp[name] = _arr_to_tree(inp[name], TreeNode)
+    except: pass
+    return inp
+` : '';
+
+  const sharedPyLib = listHelper + treeHelper + convertHelper;
+
   // Class-based function problem (e.g., class Solution: def twoSum)
   if (className) {
     const runner = `
 import json, time, sys
 ${code}
+${sharedPyLib}
 test_cases = ${testCasesJson}
 results = []
 for tc in test_cases:
@@ -296,6 +168,7 @@ for tc in test_cases:
     try:
         inp = json.loads(tc["input"])
         sol = ${className}()
+        ${hasListNode || hasTreeNode ? `inp = _convert(inp, sol.${fn})` : ''}
         result = sol.${fn}(**inp)
         elapsed = (time.time() - start) * 1000
         pass_val = json.dumps(result, default=str) == json.dumps(json.loads(tc["expectedOutput"]), default=str)
@@ -311,12 +184,14 @@ print(json.dumps({"results": results}))
   const runner = `
 import json, time, sys
 ${code}
+${sharedPyLib}
 test_cases = ${testCasesJson}
 results = []
 for tc in test_cases:
     start = time.time()
     try:
         inp = json.loads(tc["input"])
+        ${hasListNode || hasTreeNode ? `inp = _convert(inp, ${fn})` : ''}
         result = ${fn}(**inp)
         elapsed = (time.time() - start) * 1000
         pass_val = json.dumps(result, default=str) == json.dumps(json.loads(tc["expectedOutput"]), default=str)
@@ -1049,356 +924,6 @@ int main() {
   };
 }
 
-/* ---------- Go ---------- */
-function generateGoRunner(
-  code: string,
-  fn: string,
-  testCasesJson: string
-): { files: Record<string, string>; command: string } {
-  const runner = `
-package main
-
-import (
-  "encoding/json"
-  "fmt"
-  "os"
-  "reflect"
-  "time"
-)
-
-type TestCase struct {
-  Input          string \`json:"input"\`
-  ExpectedOutput string \`json:"expectedOutput"\`
-}
-
-type TestResult struct {
-  Pass     bool    \`json:"pass"\`
-  Runtime  float64 \`json:"runtime"\`
-  Memory   int     \`json:"memory"\`
-  Error    *string \`json:"error"\`
-  Expected string  \`json:"expected"\`
-  Actual   *string \`json:"actual"\`
-}
-
-type Output struct {
-  Results []TestResult \`json:"results"\`
-}
-
-func deepEqual(a, b interface{}) bool {
-  if a == nil && b == nil { return true }
-  if a == nil || b == nil { return false }
-  va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
-  if va.Kind() != vb.Kind() { return false }
-  switch va.Kind() {
-  case reflect.Slice:
-    if va.Len() != vb.Len() { return false }
-    for i := 0; i < va.Len(); i++ {
-      if !deepEqual(va.Index(i).Interface(), vb.Index(i).Interface()) { return false }
-    }
-    return true
-  case reflect.Map:
-    if va.Len() != vb.Len() { return false }
-    for _, k := range va.MapKeys() {
-      vaVal := va.MapIndex(k).Interface()
-      vbVal := vb.MapIndex(k)
-      if !vbVal.IsValid() || !deepEqual(vaVal, vbVal.Interface()) { return false }
-    }
-    return true
-  }
-  return reflect.DeepEqual(a, b)
-}
-
-func main() {
-  data, err := os.ReadFile("${WORK_DIR}/testcases.json")
-  if err != nil {
-    fmt.Printf("{\\"results\\":[{\\"pass\\":false,\\"runtime\\":0,\\"memory\\":0,\\"error\\":\\"read error\\",\\"expected\\":\\"\\",\\"actual\\":null}]}")
-    return
-  }
-  var testCases []TestCase
-  if err := json.Unmarshal(data, &testCases); err != nil {
-    fmt.Printf("{\\"results\\":[{\\"pass\\":false,\\"runtime\\":0,\\"memory\\":0,\\"error\\":\\"parse error\\",\\"expected\\":\\"\\",\\"actual\\":null}]}")
-    return
-  }
-
-  output := Output{Results: make([]TestResult, 0)}
-  for _, tc := range testCases {
-    start := time.Now()
-    var inputMap map[string]interface{}
-    json.Unmarshal([]byte(tc.Input), &inputMap)
-
-    var expectedVal interface{}
-    json.Unmarshal([]byte(tc.ExpectedOutput), &expectedVal)
-    expectedVal = convertGoValue(expectedVal)
-
-    var actualVal interface{}
-    errStr := ""
-    func() {
-      defer func() {
-        if r := recover(); r != nil {
-          errStr = fmt.Sprintf("%v", r)
-        }
-      }()
-      actualVal = callFunction(inputMap)
-    }()
-
-    elapsed := float64(time.Since(start).Microseconds()) / 1000.0
-
-    if errStr != "" {
-      e := errStr
-      output.Results = append(output.Results, TestResult{Pass: false, Runtime: elapsed, Memory: 0, Error: &e, Expected: tc.ExpectedOutput, Actual: nil})
-    } else {
-      actualJson, _ := json.Marshal(actualVal)
-      actualStr := string(actualJson)
-      pass := deepEqual(actualVal, expectedVal)
-      output.Results = append(output.Results, TestResult{Pass: pass, Runtime: elapsed, Memory: 0, Error: nil, Expected: tc.ExpectedOutput, Actual: &actualStr})
-    }
-  }
-
-  outJson, _ := json.Marshal(output)
-  fmt.Println(string(outJson))
-}
-
-func callFunction(input map[string]interface{}) interface{} {
-  // The generated code will be inserted here with the specific call
-  // Since Go doesn't have reflection-based calling easily, we import the solution package
-  // and call the function with specific argument types
-  return callUserFunc(input)
-}
-`;
-  const mainGo = `
-package main
-
-import (
-  "reflect"
-)
-
-func callUserFunc(input map[string]interface{}) interface{} {
-  args := make([]reflect.Value, 0)
-  for _, v := range input {
-    args = append(args, reflect.ValueOf(convertGoValue(v)))
-  }
-  fn := reflect.ValueOf(${fn})
-  results := fn.Call(args)
-  if len(results) > 0 {
-    return results[0].Interface()
-  }
-  return nil
-}
-
-func convertGoValue(v interface{}) interface{} {
-  switch val := v.(type) {
-  case float64:
-    if val == float64(int(val)) {
-      return int(val)
-    }
-    return val
-  case []interface{}:
-    if len(val) == 0 { return val }
-    switch val[0].(type) {
-    case float64:
-      arr := make([]int, len(val))
-      for i, x := range val {
-        arr[i] = int(x.(float64))
-      }
-      return arr
-    case []interface{}:
-      outer := make([][]int, len(val))
-      for i, inner := range val {
-        innerArr := inner.([]interface{})
-        outer[i] = make([]int, len(innerArr))
-        for j, x := range innerArr {
-          outer[i][j] = int(x.(float64))
-        }
-      }
-      return outer
-    case string:
-      arr := make([]string, len(val))
-      for i, x := range val {
-        arr[i] = x.(string)
-      }
-      return arr
-    }
-    return val
-  case string:
-    return val
-  case bool:
-    return val
-  case nil:
-    return nil
-  }
-  return v
-}
-`;
-  return {
-    files: {
-      "solution.go": `package main
-
-${code}`,
-      "runner.go": runner,
-      "main.go": mainGo,
-      "testcases.json": testCasesJson,
-    },
-    command: `GOCACHE=${WORK_DIR}/gocache GOPATH=${WORK_DIR}/gopath go build -o ${WORK_DIR}/prog ${WORK_DIR}/main.go ${WORK_DIR}/runner.go ${WORK_DIR}/solution.go && ${WORK_DIR}/prog`,
-  };
-}
-
-/* ---------- TypeScript ---------- */
-function generateTsRunner(
-  code: string,
-  fn: string,
-  testCasesJson: string
-): { files: Record<string, string>; command: string } {
-  // Strip TypeScript type annotations to produce valid JS.
-  // Order matters: more specific patterns must come before generic ones.
-  // CRITICAL: never use a bare /<[^>]+>/g — it breaks comparison operators like "i < n".
-  const stripTypes = (ts: string): string =>
-    ts
-      .replace(/export\s+(default\s+)?class/g, 'class')
-      .replace(/export\s+(default\s+)?function/g, 'function')
-      .replace(/export\s+(default\s+)?const/g, 'const')
-      .replace(/export\s+(default\s+)?let/g, 'let')
-      .replace(/export\s+(default\s+)?var/g, 'var')
-      .replace(/:\s*(?:ReadonlyArray|Array|Map|Set|Promise|Record|Partial|Required|Readonly|Pick|Omit)\s*<[^>]+>/gi, '')
-      .replace(/:?\s*:\s*\w+\s*\[\s*\]/g, '')
-      .replace(/:?\s*:\s*\w+/g, '')
-      .replace(/^(\s*)public\s+/gm, '$1')
-      .replace(/^(\s*)private\s+/gm, '$1')
-      .replace(/^(\s*)protected\s+/gm, '$1')
-      .replace(/^(\s*)readonly\s+/gm, '$1')
-      .replace(/\s+as\s+\w+/g, '')
-      .replace(/\s*\|\s*(?:null|undefined)\b/g, '')
-      .replace(/<[A-Z]\w*(?:\s*,\s*[A-Z]\w*)*\s*>\s*\(/g, '(')
-      .replace(/(\w+)\s*<\s*\w+\s*>\s*\(/g, '$1(');
-
-  const cleaned = stripTypes(code);
-
-  let isDesignProblem = false;
-  let className = '';
-  try {
-    const tcs = JSON.parse(testCasesJson);
-    if (tcs.length > 0) {
-      const firstInput = JSON.parse(tcs[0].input);
-      isDesignProblem = firstInput && typeof firstInput === 'object' && 'ops' in firstInput && 'args' in firstInput;
-    }
-    const classMatch = cleaned.match(/(?:class\s+(\w+))/);
-    if (classMatch) className = classMatch[1];
-  } catch {}
-
-  if (isDesignProblem) {
-    const runner = `
-const fs = require('fs');
-${cleaned}
-const testCases = ${testCasesJson};
-const deepEq = (a, b) => {
-  if (a === b) return true;
-  if (a == null || b == null) return false;
-  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => deepEq(v, b[i]));
-  if (typeof a === 'object' && typeof b === 'object') {
-    const ka = Object.keys(a);
-    return ka.length === Object.keys(b).length && ka.every(k => deepEq(a[k], b[k]));
-  }
-  return false;
-};
-const results = [];
-for (const tc of testCases) {
-  const start = process.hrtime.bigint();
-  try {
-    const inp = JSON.parse(tc.input);
-    const ops = inp.ops;
-    const argsList = inp.args;
-    let obj = null;
-    const out = [];
-    for (let i = 0; i < ops.length; i++) {
-      const op = ops[i];
-      const arg = argsList[i];
-      if (op === "${className}") {
-        obj = new ${className}(...arg);
-        out.push(null);
-      } else {
-        const val = obj[op](...arg);
-        out.push(val !== undefined ? val : null);
-      }
-    }
-    const end = process.hrtime.bigint();
-    const rt = Number(end - start) / 1e6;
-    const pass = deepEq(out, JSON.parse(tc.expectedOutput));
-    results.push({ pass, runtime: Math.round(rt * 100) / 100, memory: 0, error: null, expected: tc.expectedOutput, actual: JSON.stringify(out) });
-  } catch (e) {
-    results.push({ pass: false, runtime: 0, memory: 0, error: e.message || String(e), expected: tc.expectedOutput, actual: null });
-  }
-}
-process.stdout.write(JSON.stringify({ results }));
-`;
-    return { files: { "runner.js": runner }, command: `node ${WORK_DIR}/runner.js` };
-  }
-
-  if (className) {
-    const runner = `
-const fs = require('fs');
-${cleaned}
-const testCases = ${testCasesJson};
-const deepEq = (a, b) => {
-  if (a === b) return true;
-  if (a == null || b == null) return false;
-  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => deepEq(v, b[i]));
-  if (typeof a === 'object' && typeof b === 'object') {
-    const ka = Object.keys(a);
-    return ka.length === Object.keys(b).length && ka.every(k => deepEq(a[k], b[k]));
-  }
-  return false;
-};
-const results = [];
-for (const tc of testCases) {
-  const start = process.hrtime.bigint();
-  try {
-    const args = Object.values(JSON.parse(tc.input));
-    const sol = new ${className}();
-    const result = sol.${fn}(...args);
-    const end = process.hrtime.bigint();
-    const rt = Number(end - start) / 1e6;
-    const pass = deepEq(result, JSON.parse(tc.expectedOutput));
-    results.push({ pass, runtime: Math.round(rt * 100) / 100, memory: 0, error: null, expected: tc.expectedOutput, actual: JSON.stringify(result) });
-  } catch (e) {
-    results.push({ pass: false, runtime: 0, memory: 0, error: e.message || String(e), expected: tc.expectedOutput, actual: null });
-  }
-}
-process.stdout.write(JSON.stringify({ results }));
-`;
-    return { files: { "runner.js": runner }, command: `node ${WORK_DIR}/runner.js` };
-  }
-
-  const runner = `
-const fs = require('fs');
-${cleaned}
-const testCases = ${testCasesJson};
-const deepEq = (a, b) => {
-  if (a === b) return true;
-  if (a == null || b == null) return false;
-  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => deepEq(v, b[i]));
-  if (typeof a === 'object' && typeof b === 'object') {
-    const ka = Object.keys(a);
-    return ka.length === Object.keys(b).length && ka.every(k => deepEq(a[k], b[k]));
-  }
-  return false;
-};
-const results = [];
-for (const tc of testCases) {
-  const start = process.hrtime.bigint();
-  try {
-    const args = Object.values(JSON.parse(tc.input));
-    const result = ${fn}(...args);
-    const end = process.hrtime.bigint();
-    const rt = Number(end - start) / 1e6;
-    const pass = deepEq(result, JSON.parse(tc.expectedOutput));
-    results.push({ pass, runtime: Math.round(rt * 100) / 100, memory: 0, error: null, expected: tc.expectedOutput, actual: JSON.stringify(result) });
-  } catch (e) {
-    results.push({ pass: false, runtime: 0, memory: 0, error: e.message || String(e), expected: tc.expectedOutput, actual: null });
-  }
-}
-process.stdout.write(JSON.stringify({ results }));
-`;
-  return { files: { "runner.js": runner }, command: `node ${WORK_DIR}/runner.js` };
-}
 
 /* ---------- C ---------- */
 function generateCRunner(
@@ -1588,218 +1113,8 @@ int main() {
   return { files: { "runner.c": runner, "testcases.json": testCasesJson }, command: `gcc -o ${WORK_DIR}/prog ${WORK_DIR}/runner.c -lm && ${WORK_DIR}/prog` };
 }
 
-/* ---------- Rust ---------- */
-function generateRustRunner(
-  code: string,
-  fn: string,
-  testCasesJson: string
-): { files: Record<string, string>; command: string } {
-  const testCases = JSON.parse(testCasesJson);
-  const firstInput = testCases.length > 0 ? JSON.parse(testCases[0].input) : {};
-  const argKeys = Object.keys(firstInput);
-  const argVals = Object.values(firstInput);
 
-  function rustType(val: unknown): string {
-    if (Array.isArray(val)) {
-      if (val.length > 0 && Array.isArray(val[0])) return "Vec<Vec<i32>>";
-      return "Vec<i32>";
-    }
-    if (typeof val === "string") return "String";
-    return "i32";
-  }
 
-  function extractRust(name: string, val: unknown): string {
-    if (Array.isArray(val)) {
-      if ((val as any[]).length > 0 && Array.isArray((val as any[])[0])) {
-        return `let ${name}: Vec<Vec<i32>> = parse_json_vecvec(&input_map["${name}"]);`;
-      }
-      return `let ${name}: Vec<i32> = parse_json_vec(&input_map["${name}"]);`;
-    }
-    if (typeof val === "string") return `let ${name}: String = input_map["${name}"].clone();`;
-    return `let ${name}: i32 = input_map["${name}"].parse().unwrap_or(0);`;
-  }
 
-  const argExtract = argKeys.map((k, i) => "    " + extractRust(k, argVals[i])).join("\n");
-  const argCall = argKeys.join(", ");
 
-  const runner = `
-use std::collections::HashMap;
-use std::fs;
-use std::time::Instant;
 
-${code.replace(/pub\s+fn/g, 'fn')}
-
-fn trim(s: &str) -> &str { s.trim_start_matches(' ').trim_end_matches(' ') }
-
-fn parse_str(s: &str, i: &mut usize) -> String {
-    let mut res = String::new();
-    *i += 1;
-    let bytes = s.as_bytes();
-    while *i < s.len() {
-        if bytes[*i] == b'\\\\' && *i + 1 < s.len() && bytes[*i + 1] == b'"' {
-            res.push('"'); *i += 2; continue;
-        }
-        if bytes[*i] == b'"' { break; }
-        res.push(bytes[*i] as char);
-        *i += 1;
-    }
-    *i += 1;
-    res
-}
-
-fn parse_num(s: &str, i: &mut usize) -> String {
-    let start = *i;
-    while *i < s.len() && (s.as_bytes()[*i].is_ascii_digit() || s.as_bytes()[*i] == b'-' || s.as_bytes()[*i] == b'.') {
-        *i += 1;
-    }
-    s[start..*i].to_string()
-}
-
-fn skip_ws(s: &str, i: &mut usize) { while *i < s.len() && s.as_bytes()[*i] == b' ' { *i += 1; } }
-
-fn parse_value(s: &str, i: &mut usize, depth: usize) -> String {
-    skip_ws(s, i);
-    if *i >= s.len() { return "null".to_string(); }
-    let c = s.as_bytes()[*i];
-    if c == b'"' { return parse_str(s, i); }
-    if c == b'n' { *i += 4; return "null".to_string(); }
-    if c == b't' { *i += 4; return "true".to_string(); }
-    if c == b'f' { *i += 5; return "false".to_string(); }
-    if c == b'[' {
-        let start = *i;
-        let mut in_str = false;
-        *i += 1;
-        let mut br = 1;
-        while *i < s.len() && br > 0 {
-            if s.as_bytes()[*i] == b'"' && (*i == 0 || s.as_bytes()[*i-1] != b'\\\\') { in_str = !in_str; }
-            if !in_str {
-                if s.as_bytes()[*i] == b'[' { br += 1; }
-                else if s.as_bytes()[*i] == b']' { br -= 1; }
-            }
-            *i += 1;
-        }
-        return s[start..*i].to_string();
-    }
-    if c == b'{' {
-        let start = *i;
-        let mut in_str = false;
-        *i += 1;
-        let mut br = 1;
-        while *i < s.len() && br > 0 {
-            if s.as_bytes()[*i] == b'"' && (*i == 0 || s.as_bytes()[*i-1] != b'\\\\') { in_str = !in_str; }
-            if !in_str {
-                if s.as_bytes()[*i] == b'{' { br += 1; }
-                else if s.as_bytes()[*i] == b'}' { br -= 1; }
-            }
-            *i += 1;
-        }
-        return s[start..*i].to_string();
-    }
-    parse_num(s, i)
-}
-
-fn parse_obj(s: &str) -> HashMap<String, String> {
-    let mut map = HashMap::new();
-    let s = s.trim();
-    if !s.starts_with('{') { return map; }
-    let inner = &s[1..s.len()-1];
-    let mut i = 0;
-    while i < inner.len() {
-        skip_ws(inner, &mut i);
-        if i >= inner.len() || inner.as_bytes()[i] != b'"' { break; }
-        let key = parse_str(inner, &mut i);
-        while i < inner.len() && inner.as_bytes()[i] != b':' { i += 1; }
-        i += 1;
-        let val = parse_value(inner, &mut i, 0);
-        map.insert(key, val);
-        while i < inner.len() && (inner.as_bytes()[i] == b',' || inner.as_bytes()[i] == b' ') { i += 1; }
-    }
-    map
-}
-
-fn parse_tests(s: &str) -> Vec<HashMap<String, String>> {
-    let mut result = Vec::new();
-    let s = s.trim();
-    if !s.starts_with('[') { return result; }
-    let mut i = 0;
-    let mut depth = 0;
-    let start = 1;
-    let mut obj_start: Option<usize> = None;
-    let mut in_str = false;
-    let bytes = s.as_bytes();
-    for pos in 1..s.len() {
-        if bytes[pos] == b'"' && bytes[pos-1] != b'\\\\' { in_str = !in_str; }
-        if in_str { continue; }
-        if bytes[pos] == b'{' { if depth == 0 { obj_start = Some(pos); } depth += 1; }
-        else if bytes[pos] == b'}' { depth -= 1; if depth == 0 { if let Some(os) = obj_start { result.push(parse_obj(&s[os..=pos])); } } }
-    }
-    result
-}
-
-fn parse_json_vec(s: &str) -> Vec<i32> {
-    let s = s.trim();
-    if !s.starts_with('[') { return vec![]; }
-    if s.len() < 2 { return vec![]; }
-    let inner = s[1..s.len()-1].trim();
-    if inner.is_empty() { return vec![]; }
-    inner.split(',').map(|x| x.trim().parse().unwrap_or(0)).collect()
-}
-
-fn parse_json_vecvec(s: &str) -> Vec<Vec<i32>> {
-    let s = s.trim();
-    if !s.starts_with('[') { return vec![]; }
-    if s.len() < 2 { return vec![]; }
-    let inner = s[1..s.len()-1].trim();
-    if inner.is_empty() { return vec![]; }
-    let mut result = vec![];
-    let mut depth = 0;
-    let mut start = 0;
-    for (i, c) in inner.char_indices() {
-        if c == '[' { depth += 1; }
-        else if c == ']' { depth -= 1; }
-        else if c == ',' && depth == 0 {
-            result.push(parse_json_vec(&inner[start..i]));
-            start = i + 1;
-        }
-    }
-    if start < inner.len() { result.push(parse_json_vec(&inner[start..])); }
-    result
-}
-
-fn main() {
-    let content = fs::read_to_string("${WORK_DIR}/testcases.json").unwrap_or_default();
-    let test_cases = parse_tests(&content);
-
-    print!("{{\\"results\\":[");
-    let mut first = true;
-
-    for tc in &test_cases {
-        let input_raw = tc.get("input").cloned().unwrap_or_default();
-        let expected = tc.get("expectedOutput").cloned().unwrap_or_default();
-        let input_map = parse_obj(&input_raw);
-
-        let start = Instant::now();
-        let result = std::panic::catch_unwind(|| {
-            ${argExtract}
-            ${fn}(${argCall})
-        });
-        let duration = start.elapsed().as_micros() as f64 / 1000.0;
-
-        let (pass, actual) = match result {
-            Ok(val) => {
-                let actual_str = format!("{:?}", val);
-                let normalized = actual_str.replace(" ", "");
-                (normalized == expected, actual_str)
-            }
-            Err(_) => (false, String::new()),
-        };
-
-        if !first { print!(","); } first = false;
-        print!("{{\\"pass\\":{},\\"runtime\\":{:.2},\\"memory\\":0,\\"error\\":null,\\"expected\\":\\"{}\\",\\"actual\\":\\"{}\\"}}",
-            if pass { "true" } else { "false" }, duration, expected, actual);
-    }
-    println!("]}}");
-}
-`;
-  return { files: { "runner.rs": runner, "testcases.json": testCasesJson }, command: `rustc -o ${WORK_DIR}/prog ${WORK_DIR}/runner.rs && ${WORK_DIR}/prog` };
-}

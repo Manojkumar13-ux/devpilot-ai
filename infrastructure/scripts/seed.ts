@@ -2,15 +2,11 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const sc = (js: string, py: string, java: string, cpp: string, go: string, ts: string, c: string, rust: string) => ({
-  javascript: js.trim(),
+const sc = (py: string, java: string, cpp: string, c: string) => ({
   python: py.trim(),
   java: java.trim(),
   cpp: cpp.trim(),
-  go: go.trim(),
-  typescript: ts.trim(),
   c: c.trim(),
-  rust: rust.trim(),
 });
 
 const tc = (input: unknown, expected: unknown, hidden = false) => ({
@@ -43,14 +39,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function twoSum(nums, target) {\n  // TODO: implement\n}`,
       `def two_sum(nums, target):\n    # TODO: implement\n    pass`,
-      `class Solution {\n  public int[] twoSum(int[] nums, int target) {\n    // TODO: implement\n    return 0;\n  }\n}`,
+      `class Solution {\n  public int[] twoSum(int[] nums, int target) {\n    // TODO: implement\n    return new int[0];\n  }\n}`,
       `class Solution {\npublic:\n  vector<int> twoSum(vector<int>& nums, int target) {\n    // TODO: implement\n    return {};\n  }\n};`,
-      `func twoSum(nums []int, target int) []int {\n  // TODO: implement\n  return nil\n}`,
-      `function twoSum(nums: number[], target: number): number[] {\n  // TODO: implement\n}`,
       `int* twoSum(int* nums, int numsSize, int target, int* returnSize) {\n  // TODO: implement\n  return NULL;\n}`,
-      `pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"nums":[2,7,11,15],"target":9}, [0,1]),
@@ -77,14 +69,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function maxProfit(prices) {\n  // TODO: implement\n}`,
       `def max_profit(prices):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public int maxProfit(int[] prices) {\n    // TODO: implement\n    return 0;\n  }\n}`,
       `class Solution {\npublic:\n  int maxProfit(vector<int>& prices) {\n    // TODO: implement\n    return 0;\n  }\n};`,
-      `func maxProfit(prices []int) int {\n  // TODO: implement\n  return nil\n}`,
-      `function maxProfit(prices: number[]): number {\n  // TODO: implement\n}`,
       `int maxProfit(int* prices, int pricesSize) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn max_profit(prices: Vec<i32>) -> i32 {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"prices":[7,1,5,3,6,4]}, 5),
@@ -111,14 +99,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function plusOne(digits) {\n  // TODO: implement\n}`,
       `def plus_one(digits):\n    # TODO: implement\n    pass`,
-      `class Solution {\n  public int[] plusOne(int[] digits) {\n    // TODO: implement\n    return 0;\n  }\n}`,
+      `class Solution {\n  public int[] plusOne(int[] digits) {\n    // TODO: implement\n    return new int[0];\n  }\n}`,
       `class Solution {\npublic:\n  vector<int> plusOne(vector<int>& digits) {\n    // TODO: implement\n    return {};\n  }\n};`,
-      `func plusOne(digits []int) []int {\n  // TODO: implement\n  return nil\n}`,
-      `function plusOne(digits: number[]): number[] {\n  // TODO: implement\n}`,
       `int* plusOne(int* digits, int digitsSize, int* returnSize) {\n  // TODO: implement\n  return NULL;\n}`,
-      `pub fn plus_one(digits: Vec<i32>) -> Vec<i32> {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"digits":[1,2,3]}, [1,2,4]),
@@ -145,14 +129,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function singleNumber(nums) {\n  // TODO: implement\n}`,
       `def single_number(nums):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public int singleNumber(int[] nums) {\n    // TODO: implement\n    return 0;\n  }\n}`,
       `class Solution {\npublic:\n  int singleNumber(vector<int>& nums) {\n    // TODO: implement\n    return 0;\n  }\n};`,
-      `func singleNumber(nums []int) int {\n  // TODO: implement\n  return nil\n}`,
-      `function singleNumber(nums: number[]): number {\n  // TODO: implement\n}`,
       `int singleNumber(int* nums, int numsSize) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn single_number(nums: Vec<i32>) -> i32 {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"nums":[2,2,1]}, 1),
@@ -179,14 +159,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function isAnagram(s, t) {\n  // TODO: implement\n}`,
       `def is_anagram(s, t):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public boolean isAnagram(String s, String t) {\n    // TODO: implement\n    return false;\n  }\n}`,
       `class Solution {\npublic:\n  bool isAnagram(string s, string t) {\n    // TODO: implement\n    return false;\n  }\n};`,
-      `func isAnagram(s string, t string) bool {\n  // TODO: implement\n  return false\n}`,
-      `function isAnagram(s: string, t: string): boolean {\n  // TODO: implement\n}`,
       `bool isAnagram(char* s, char* t) {\n  // TODO: implement\n  return false;\n}`,
-      `pub fn is_anagram(s: String, t: String) -> bool {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"s":"anagram","t":"nagaram"}, true),
@@ -213,14 +189,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function containsDuplicate(nums) {\n  // TODO: implement\n}`,
       `def contains_duplicate(nums):\n    # TODO: implement\n    pass`,
-      `class Solution {\n  public boolean containsDuplicate(int[] nums) {\n    // TODO: implement\n    return 0;\n  }\n}`,
+      `class Solution {\n  public boolean containsDuplicate(int[] nums) {\n    // TODO: implement\n    return false;\n  }\n}`,
       `class Solution {\npublic:\n  bool containsDuplicate(vector<int>& nums) {\n    // TODO: implement\n    return false;\n  }\n};`,
-      `func containsDuplicate(nums []int) bool {\n  // TODO: implement\n  return nil\n}`,
-      `function containsDuplicate(nums: number[]): boolean {\n  // TODO: implement\n}`,
       `bool containsDuplicate(int* nums, int numsSize) {\n  // TODO: implement\n  return false;\n}`,
-      `pub fn contains_duplicate(nums: Vec<i32>) -> bool {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"nums":[1,2,3,1]}, true),
@@ -247,14 +219,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function canConstruct(ransomNote, magazine) {\n  // TODO: implement\n}`,
       `def can_construct(ransom_note, magazine):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public boolean canConstruct(String ransomNote, String magazine) {\n    // TODO: implement\n    return false;\n  }\n}`,
       `class Solution {\npublic:\n  bool canConstruct(string ransomNote, string magazine) {\n    // TODO: implement\n    return false;\n  }\n};`,
-      `func canConstruct(ransomNote string, magazine string) bool {\n  // TODO: implement\n  return false\n}`,
-      `function canConstruct(ransomNote: string, magazine: string): boolean {\n  // TODO: implement\n}`,
       `bool canConstruct(char* ransomNote, char* magazine) {\n  // TODO: implement\n  return false;\n}`,
-      `pub fn can_construct(ransom_note: String, magazine: String) -> bool {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"ransomNote":"a","magazine":"b"}, false),
@@ -281,14 +249,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function wordPattern(pattern, s) {\n  // TODO: implement\n}`,
       `def word_pattern(pattern, s):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public boolean wordPattern(String pattern, String s) {\n    // TODO: implement\n    return false;\n  }\n}`,
       `class Solution {\npublic:\n  bool wordPattern(string pattern, string s) {\n    // TODO: implement\n    return false;\n  }\n};`,
-      `func wordPattern(pattern string, s string) bool {\n  // TODO: implement\n  return false\n}`,
-      `function wordPattern(pattern: string, s: string): boolean {\n  // TODO: implement\n}`,
       `bool wordPattern(char* pattern, char* s) {\n  // TODO: implement\n  return false;\n}`,
-      `pub fn word_pattern(pattern: String, s: String) -> bool {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"pattern":"abba","s":"dog cat cat dog"}, true),
@@ -315,14 +279,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function isPalindrome(s) {\n  // TODO: implement\n}`,
       `def is_palindrome(s):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public boolean isPalindrome(String s) {\n    // TODO: implement\n    return false;\n  }\n}`,
       `class Solution {\npublic:\n  bool isPalindrome(string s) {\n    // TODO: implement\n    return false;\n  }\n};`,
-      `func isPalindrome(s string) bool {\n  // TODO: implement\n  return false\n}`,
-      `function isPalindrome(s: string): boolean {\n  // TODO: implement\n}`,
       `bool isPalindrome(char* s) {\n  // TODO: implement\n  return false;\n}`,
-      `pub fn is_palindrome(s: String) -> bool {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"s":"A man, a plan, a canal: Panama"}, true),
@@ -349,14 +309,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function moveZeroes(nums) {\n  // TODO: implement\n}`,
       `def move_zeroes(nums):\n    # TODO: implement\n    pass`,
-      `class Solution {\n  public void moveZeroes(int[] nums) {\n    // TODO: implement\n    return 0;\n  }\n}`,
+      `class Solution {\n  public void moveZeroes(int[] nums) {\n    // TODO: implement\n    ;\n  }\n}`,
       `class Solution {\npublic:\n  void moveZeroes(vector<int>& nums) {\n    // TODO: implement\n    ;\n  }\n};`,
-      `func moveZeroes(nums []int) {\n  // TODO: implement\n  return nil\n}`,
-      `function moveZeroes(nums: number[]): void {\n  // TODO: implement\n}`,
       `void moveZeroes(int* nums, int numsSize) {\n  // TODO: implement\n  ;\n}`,
-      `pub fn move_zeroes(nums: &mut Vec<i32>) {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"nums":[0,1,0,3,12]}, [1,3,12,0,0]),
@@ -383,14 +339,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function removeDuplicates(nums) {\n  // TODO: implement\n}`,
       `def remove_duplicates(nums):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public int removeDuplicates(int[] nums) {\n    // TODO: implement\n    return 0;\n  }\n}`,
       `class Solution {\npublic:\n  int removeDuplicates(vector<int>& nums) {\n    // TODO: implement\n    return 0;\n  }\n};`,
-      `func removeDuplicates(nums []int) int {\n  // TODO: implement\n  return nil\n}`,
-      `function removeDuplicates(nums: number[]): number {\n  // TODO: implement\n}`,
       `int removeDuplicates(int* nums, int numsSize) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn remove_duplicates(nums: &mut Vec<i32>) -> i32 {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"nums":[1,1,2]}, 2),
@@ -417,14 +369,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function isValid(s) {\n  // TODO: implement\n}`,
       `def is_valid(s):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public boolean isValid(String s) {\n    // TODO: implement\n    return false;\n  }\n}`,
       `class Solution {\npublic:\n  bool isValid(string s) {\n    // TODO: implement\n    return false;\n  }\n};`,
-      `func isValid(s string) bool {\n  // TODO: implement\n  return false\n}`,
-      `function isValid(s: string): boolean {\n  // TODO: implement\n}`,
       `bool isValid(char* s) {\n  // TODO: implement\n  return false;\n}`,
-      `pub fn is_valid(s: String) -> bool {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"s":"()"}, true),
@@ -452,14 +400,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function MyQueue() {\n  // TODO: implement\n}`,
       `def MyQueue():\n    # TODO: implement\n    pass`,
-      `class Solution {\n  public MyQueue() {\n    // TODO: implement\n    ;\n  }\n}`,
-      `class Solution {\npublic:\n  MyQueue() {\n    // TODO: implement\n    return nullptr;\n  }\n};`,
-      `func Constructor() {\n  // TODO: implement\n  \n}`,
-      `function constructor() {\n  // TODO: implement\n}`,
+      `class Solution {\n  public MyQueue() {\n    // TODO: implement\n    return 0;\n  }\n}`,
+      `class Solution {\npublic:\n  MyQueue() {\n    // TODO: implement\n    return {};\n  }\n};`,
       `myQueueCreate() {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn new() -> Self {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"ops":["MyQueue","push","push","peek","pop","empty"],"args":[[],[1],[2],[],[],[]]}, [null,null,null,1,1,false]),
@@ -484,14 +428,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function lengthOfLongestSubstring(s) {\n  // TODO: implement\n}`,
       `def length_of_longest_substring(s):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public int lengthOfLongestSubstring(String s) {\n    // TODO: implement\n    return 0;\n  }\n}`,
       `class Solution {\npublic:\n  int lengthOfLongestSubstring(string s) {\n    // TODO: implement\n    return 0;\n  }\n};`,
-      `func lengthOfLongestSubstring(s string) int {\n  // TODO: implement\n  return 0\n}`,
-      `function lengthOfLongestSubstring(s: string): number {\n  // TODO: implement\n}`,
       `int lengthOfLongestSubstring(char* s) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn length_of_longest_substring(s: String) -> i32 {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"s":"abcabcbb"}, 3),
@@ -519,14 +459,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function threeSum(nums) {\n  // TODO: implement\n}`,
       `def three_sum(nums):\n    # TODO: implement\n    pass`,
-      `class Solution {\n  public List<List<Integer>> threeSum(int[] nums) {\n    // TODO: implement\n    return 0;\n  }\n}`,
+      `class Solution {\n  public List<List<Integer>> threeSum(int[] nums) {\n    // TODO: implement\n    return new ArrayList<>();\n  }\n}`,
       `class Solution {\npublic:\n  vector<vector<int>> threeSum(vector<int>& nums) {\n    // TODO: implement\n    return {};\n  }\n};`,
-      `func threeSum(nums []int) [][]int {\n  // TODO: implement\n  return nil\n}`,
-      `function threeSum(nums: number[]): number[][] {\n  // TODO: implement\n}`,
       `int** threeSum(int* nums, int numsSize, int* returnSize, int** returnColumnSizes) {\n  // TODO: implement\n  return NULL;\n}`,
-      `pub fn three_sum(nums: Vec<i32>) -> Vec<Vec<i32>> {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"nums":[-1,0,1,2,-1,-4]}, [[-1,-1,2],[-1,0,1]]),
@@ -553,14 +489,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function addTwoNumbers(l1, l2) {\n  // TODO: implement\n}`,
       `def add_two_numbers(l1, l2):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public ListNode addTwoNumbers(ListNode l1, ListNode l2) {\n    // TODO: implement\n    return new ArrayList<>();\n  }\n}`,
       `class Solution {\npublic:\n  ListNode* addTwoNumbers(ListNode* l1, ListNode* l2) {\n    // TODO: implement\n    return nullptr;\n  }\n};`,
-      `func addTwoNumbers(l1 *ListNode, l2 *ListNode) *ListNode {\n  // TODO: implement\n  return nil\n}`,
-      `function addTwoNumbers(l1: ListNode | null, l2: ListNode | null): ListNode | null {\n  // TODO: implement\n}`,
-      `struct ListNode* addTwoNumbers(struct ListNode* l1, struct ListNode* l2) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn add_two_numbers(l1: Option<Box<ListNode>>, l2: Option<Box<ListNode>>) -> Option<Box<ListNode>> {\n  // TODO: implement\n  unimplemented!()\n}`,
+      `struct ListNode* addTwoNumbers(struct ListNode* l1, struct ListNode* l2) {\n  // TODO: implement\n  return NULL;\n}`,
     ),
     testCases: [
       tc({"l1":[2,4,3],"l2":[5,6,4]}, [7,0,8]),
@@ -587,14 +519,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function reverseList(head) {\n  // TODO: implement\n}`,
       `def reverse_list(head):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public ListNode reverseList(ListNode head) {\n    // TODO: implement\n    return new ArrayList<>();\n  }\n}`,
       `class Solution {\npublic:\n  ListNode* reverseList(ListNode* head) {\n    // TODO: implement\n    return nullptr;\n  }\n};`,
-      `func reverseList(head *ListNode) *ListNode {\n  // TODO: implement\n  return nil\n}`,
-      `function reverseList(head: ListNode | null): ListNode | null {\n  // TODO: implement\n}`,
-      `struct ListNode* reverseList(struct ListNode* head) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn reverse_list(head: Option<Box<ListNode>>) -> Option<Box<ListNode>> {\n  // TODO: implement\n  unimplemented!()\n}`,
+      `struct ListNode* reverseList(struct ListNode* head) {\n  // TODO: implement\n  return NULL;\n}`,
     ),
     testCases: [
       tc({"head":[1,2,3,4,5]}, [5,4,3,2,1]),
@@ -621,14 +549,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function inorderTraversal(root) {\n  // TODO: implement\n}`,
       `def inorder_traversal(root):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public List<Integer> inorderTraversal(TreeNode root) {\n    // TODO: implement\n    return new ArrayList<>();\n  }\n}`,
       `class Solution {\npublic:\n  vector<int> inorderTraversal(TreeNode* root) {\n    // TODO: implement\n    return {};\n  }\n};`,
-      `func inorderTraversal(root *TreeNode) []int {\n  // TODO: implement\n  return nil\n}`,
-      `function inorderTraversal(root: TreeNode | null): number[] {\n  // TODO: implement\n}`,
       `int* inorderTraversal(struct TreeNode* root, int* returnSize) {\n  // TODO: implement\n  return NULL;\n}`,
-      `pub fn inorder_traversal(root: Option<Rc<RefCell<TreeNode>>>) -> Vec<i32> {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"root":[1,null,2,3]}, [1,3,2]),
@@ -655,14 +579,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function isValidBST(root) {\n  // TODO: implement\n}`,
       `def is_valid_bst(root):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public boolean isValidBST(TreeNode root) {\n    // TODO: implement\n    return false;\n  }\n}`,
       `class Solution {\npublic:\n  bool isValidBST(TreeNode* root) {\n    // TODO: implement\n    return false;\n  }\n};`,
-      `func isValidBST(root *TreeNode) bool {\n  // TODO: implement\n  return false\n}`,
-      `function isValidBST(root: TreeNode | null): boolean {\n  // TODO: implement\n}`,
       `bool isValidBST(struct TreeNode* root) {\n  // TODO: implement\n  return false;\n}`,
-      `pub fn is_valid_bst(root: Option<Rc<RefCell<TreeNode>>>) -> bool {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"root":[2,1,3]}, true),
@@ -689,14 +609,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function numIslands(grid) {\n  // TODO: implement\n}`,
       `def num_islands(grid):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public int numIslands(char[][] grid) {\n    // TODO: implement\n    return 0;\n  }\n}`,
       `class Solution {\npublic:\n  int numIslands(vector<vector<char>>& grid) {\n    // TODO: implement\n    return 0;\n  }\n};`,
-      `func numIslands(grid [][]byte) int {\n  // TODO: implement\n  return 0\n}`,
-      `function numIslands(grid: string[][]): number {\n  // TODO: implement\n}`,
       `int numIslands(char** grid, int gridSize, int* gridColSize) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn num_islands(grid: Vec<Vec<char>>) -> i32 {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"grid":[["1","1","1","1","0"],["1","1","0","1","0"],["1","1","0","0","0"],["0","0","0","0","0"]]}, 1),
@@ -723,14 +639,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function cloneGraph(node) {\n  // TODO: implement\n}`,
       `def clone_graph(node):\n    # TODO: implement\n    pass`,
-      `class Solution {\n  public Node cloneGraph(Node node) {\n    // TODO: implement\n    return null;\n  }\n}`,
+      `class Solution {\n  public Node cloneGraph(Node node) {\n    // TODO: implement\n    return 0;\n  }\n}`,
       `class Solution {\npublic:\n  Node* cloneGraph(Node* node) {\n    // TODO: implement\n    return nullptr;\n  }\n};`,
-      `func cloneGraph(node *Node) *Node {\n  // TODO: implement\n  return nil\n}`,
-      `function cloneGraph(node: Node | null): Node | null {\n  // TODO: implement\n}`,
       `struct Node* cloneGraph(struct Node* node) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn clone_graph(node: Option<Rc<RefCell<Node>>>) -> Option<Rc<RefCell<Node>>> {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"adjList":[[2,4],[1,3],[2,4],[1,3]]}, [[2,4],[1,3],[2,4],[1,3]]),
@@ -756,14 +668,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function subsets(nums) {\n  // TODO: implement\n}`,
       `def subsets(nums):\n    # TODO: implement\n    pass`,
-      `class Solution {\n  public List<List<Integer>> subsets(int[] nums) {\n    // TODO: implement\n    return 0;\n  }\n}`,
+      `class Solution {\n  public List<List<Integer>> subsets(int[] nums) {\n    // TODO: implement\n    return new ArrayList<>();\n  }\n}`,
       `class Solution {\npublic:\n  vector<vector<int>> subsets(vector<int>& nums) {\n    // TODO: implement\n    return {};\n  }\n};`,
-      `func subsets(nums []int) [][]int {\n  // TODO: implement\n  return nil\n}`,
-      `function subsets(nums: number[]): number[][] {\n  // TODO: implement\n}`,
       `int** subsets(int* nums, int numsSize, int* returnSize, int** returnColumnSizes) {\n  // TODO: implement\n  return NULL;\n}`,
-      `pub fn subsets(nums: Vec<i32>) -> Vec<Vec<i32>> {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"nums":[1,2,3]}, [[],[1],[2],[1,2],[3],[1,3],[2,3],[1,2,3]]),
@@ -789,14 +697,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function search(nums, target) {\n  // TODO: implement\n}`,
       `def search(nums, target):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public int search(int[] nums, int target) {\n    // TODO: implement\n    return 0;\n  }\n}`,
       `class Solution {\npublic:\n  int search(vector<int>& nums, int target) {\n    // TODO: implement\n    return 0;\n  }\n};`,
-      `func search(nums []int, target int) int {\n  // TODO: implement\n  return nil\n}`,
-      `function search(nums: number[], target: number): number {\n  // TODO: implement\n}`,
       `int search(int* nums, int numsSize, int target) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn search(nums: Vec<i32>, target: i32) -> i32 {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"nums":[4,5,6,7,0,1,2],"target":0}, 4),
@@ -824,14 +728,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function canJump(nums) {\n  // TODO: implement\n}`,
       `def can_jump(nums):\n    # TODO: implement\n    pass`,
-      `class Solution {\n  public boolean canJump(int[] nums) {\n    // TODO: implement\n    return 0;\n  }\n}`,
+      `class Solution {\n  public boolean canJump(int[] nums) {\n    // TODO: implement\n    return false;\n  }\n}`,
       `class Solution {\npublic:\n  bool canJump(vector<int>& nums) {\n    // TODO: implement\n    return false;\n  }\n};`,
-      `func canJump(nums []int) bool {\n  // TODO: implement\n  return nil\n}`,
-      `function canJump(nums: number[]): boolean {\n  // TODO: implement\n}`,
       `bool canJump(int* nums, int numsSize) {\n  // TODO: implement\n  return false;\n}`,
-      `pub fn can_jump(nums: Vec<i32>) -> bool {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"nums":[2,3,1,1,4]}, true),
@@ -858,14 +758,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function leastInterval(tasks, n) {\n  // TODO: implement\n}`,
       `def least_interval(tasks, n):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public int leastInterval(char[] tasks, int n) {\n    // TODO: implement\n    return 0;\n  }\n}`,
       `class Solution {\npublic:\n  int leastInterval(vector<char>& tasks, int n) {\n    // TODO: implement\n    return 0;\n  }\n};`,
-      `func leastInterval(tasks []byte, n int) int {\n  // TODO: implement\n  return 0\n}`,
-      `function leastInterval(tasks: string[], n: number): number {\n  // TODO: implement\n}`,
       `int leastInterval(char* tasks, int tasksSize, int n) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn least_interval(tasks: Vec<char>, n: i32) -> i32 {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"tasks":["A","A","A","B","B","B"],"n":2}, 8),
@@ -892,14 +788,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function isMatch(s, p) {\n  // TODO: implement\n}`,
       `def is_match(s, p):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public boolean isMatch(String s, String p) {\n    // TODO: implement\n    return false;\n  }\n}`,
       `class Solution {\npublic:\n  bool isMatch(string s, string p) {\n    // TODO: implement\n    return false;\n  }\n};`,
-      `func isMatch(s string, p string) bool {\n  // TODO: implement\n  return false\n}`,
-      `function isMatch(s: string, p: string): boolean {\n  // TODO: implement\n}`,
       `bool isMatch(char* s, char* p) {\n  // TODO: implement\n  return false;\n}`,
-      `pub fn is_match(s: String, p: String) -> bool {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"s":"aa","p":"a"}, false),
@@ -929,14 +821,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function minDistance(word1, word2) {\n  // TODO: implement\n}`,
       `def min_distance(word1, word2):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public int minDistance(String word1, String word2) {\n    // TODO: implement\n    return 0;\n  }\n}`,
       `class Solution {\npublic:\n  int minDistance(string word1, string word2) {\n    // TODO: implement\n    return 0;\n  }\n};`,
-      `func minDistance(word1 string, word2 string) int {\n  // TODO: implement\n  return 0\n}`,
-      `function minDistance(word1: string, word2: string): number {\n  // TODO: implement\n}`,
       `int minDistance(char* word1, char* word2) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn min_distance(word1: String, word2: String) -> i32 {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"word1":"horse","word2":"ros"}, 3),
@@ -964,14 +852,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function alienOrder(words) {\n  // TODO: implement\n}`,
       `def alien_order(words):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public String alienOrder(String[] words) {\n    // TODO: implement\n    return "";\n  }\n}`,
       `class Solution {\npublic:\n  string alienOrder(vector<string>& words) {\n    // TODO: implement\n    return "";\n  }\n};`,
-      `func alienOrder(words []string) string {\n  // TODO: implement\n  return ""\n}`,
-      `function alienOrder(words: string[]): string {\n  // TODO: implement\n}`,
       `char* alienOrder(char** words, int wordsSize) {\n  // TODO: implement\n  return NULL;\n}`,
-      `pub fn alien_order(words: Vec<String>) -> String {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"words":["wrt","wrf","er","ett","rftt"]}, "wertf"),
@@ -998,14 +882,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function ladderLength(beginWord, endWord, wordList) {\n  // TODO: implement\n}`,
       `def ladder_length(begin_word, end_word, word_list):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public int ladderLength(String beginWord, String endWord, List<String> wordList) {\n    // TODO: implement\n    return 0;\n  }\n}`,
       `class Solution {\npublic:\n  int ladderLength(string beginWord, string endWord, vector<string>& wordList) {\n    // TODO: implement\n    return 0;\n  }\n};`,
-      `func ladderLength(beginWord string, endWord string, wordList []string) int {\n  // TODO: implement\n  return 0\n}`,
-      `function ladderLength(beginWord: string, endWord: string, wordList: string[]): number {\n  // TODO: implement\n}`,
       `int ladderLength(char* beginWord, char* endWord, char** wordList, int wordListSize) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn ladder_length(begin_word: String, end_word: String, word_list: Vec<String>) -> i32 {\n  // TODO: implement\n  unimplemented!()\n}`,
     ),
     testCases: [
       tc({"beginWord":"hit","endWord":"cog","wordList":["hot","dot","dog","lot","log","cog"]}, 5),
@@ -1032,14 +912,10 @@ const problems: Array<{
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      `function mergeKLists(lists) {\n  // TODO: implement\n}`,
       `def merge_k_lists(lists):\n    # TODO: implement\n    pass`,
       `class Solution {\n  public ListNode mergeKLists(ListNode[] lists) {\n    // TODO: implement\n    return new ArrayList<>();\n  }\n}`,
       `class Solution {\npublic:\n  ListNode* mergeKLists(vector<ListNode*>& lists) {\n    // TODO: implement\n    return nullptr;\n  }\n};`,
-      `func mergeKLists(lists []*ListNode) *ListNode {\n  // TODO: implement\n  return nil\n}`,
-      `function mergeKLists(lists: (ListNode | null)[]): ListNode | null {\n  // TODO: implement\n}`,
-      `struct ListNode* mergeKLists(struct ListNode** lists, int listsSize) {\n  // TODO: implement\n  return 0;\n}`,
-      `pub fn merge_k_lists(lists: Vec<Option<Box<ListNode>>>) -> Option<Box<ListNode>> {\n  // TODO: implement\n  unimplemented!()\n}`,
+      `struct ListNode* mergeKLists(struct ListNode** lists, int listsSize) {\n  // TODO: implement\n  return NULL;\n}`,
     ),
     testCases: [
       tc({"lists":[[1,4,5],[1,3,4],[2,6]]}, [1,1,2,3,4,4,5,6]),

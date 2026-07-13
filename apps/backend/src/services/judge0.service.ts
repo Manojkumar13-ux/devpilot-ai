@@ -16,14 +16,10 @@ interface Judge0Response {
 }
 
 const LANG_IDS: Record<string, number> = {
-  javascript: 63,
-  typescript: 74,
   python: 71,
   java: 62,
   cpp: 54,
   c: 50,
-  go: 60,
-  rust: 73,
 };
 
 const JUDGE0_API = process.env.JUDGE0_API_URL || 'https://ce.judge0.com';
@@ -61,43 +57,50 @@ export class Judge0Service {
 
       const result = await res.json() as Judge0Response;
 
-      if (result.status.id !== 3) {
-        const statusId = result.status.id;
+      if (result.status.id === 3) {
+        // Compilation succeeded (exit 0), execution ran — parse stdout
         const compileOut = result.compile_output || '';
-        const stdErr = result.stderr || '';
-
-        // Compiler warnings (e.g., Java "Note: ...") are NOT compilation errors.
-        // javac exits 0 with warnings but Judge0 may return status 6 if compile_output is non-empty.
-        // Detect this: if there's no "error:" keyword, it's just warnings — try to use stdout.
-        if (compileOut && !/error:/i.test(compileOut)) {
-          try {
-            const parsed = JSON.parse(result.stdout || '{}');
-            if (parsed && Array.isArray(parsed.results)) {
-              return { results: parsed.results, memory: result.memory || 0, compileWarnings: compileOut };
-            }
-          } catch { /* not a false positive — fall through to real error handling */ }
+        try {
+          const parsed = JSON.parse(result.stdout || '{}');
+          if (compileOut) {
+            return { results: parsed.results || [], memory: result.memory || 0, compileWarnings: compileOut };
+          }
+          return { results: parsed.results || [], memory: result.memory || 0 };
+        } catch {
+          logger.warn({ stdout: result.stdout }, 'Failed to parse Judge0 output as JSON');
+          return { results: [], error: 'Failed to parse execution output', errorType: 'runtime_error' };
         }
-
-        let errorType = 'runtime_error';
-        if (statusId === 5) {
-          errorType = 'timeout_error';
-        } else if (statusId === 6) {
-          errorType = 'compilation_error';
-        } else if (statusId === 10 || statusId === 11) {
-          errorType = 'internal_error';
-        }
-
-        const errMsg = compileOut || stdErr || `Execution failed (status: ${result.status.description})`;
-        return { results: [], error: errMsg, errorType };
       }
 
-      try {
-        const parsed = JSON.parse(result.stdout || '{}');
-        return { results: parsed.results || [], memory: result.memory || 0 };
-      } catch {
-        logger.warn({ stdout: result.stdout }, 'Failed to parse Judge0 output as JSON');
-        return { results: [], error: 'Failed to parse execution output', errorType: 'runtime_error' };
+      // Non-success status: attempt to parse stdout as a fallback — some Judge0 CE
+      // versions return status 6 (compilation error) even when javac exits 0 with warnings.
+      // If stdout has valid results, treat it as successful execution with warnings.
+      if (result.stdout) {
+        try {
+          const parsed = JSON.parse(result.stdout);
+          if (parsed && Array.isArray(parsed.results)) {
+            return { results: parsed.results, memory: result.memory || 0, compileWarnings: result.compile_output || '' };
+          }
+        } catch { /* invalid JSON — fall through to real error handling */ }
       }
+
+      const statusId = result.status.id;
+      const compileOut = result.compile_output || '';
+      const stdErr = result.stderr || '';
+
+      let errorType = 'runtime_error';
+      if (statusId === 5) {
+        errorType = 'timeout_error';
+      } else if (statusId === 6) {
+        errorType = 'compilation_error';
+      } else if (statusId >= 7 && statusId <= 12) {
+        errorType = 'runtime_error';
+      } else if (statusId >= 13) {
+        errorType = 'internal_error';
+      }
+
+      const errMsg = compileOut || stdErr || `Execution failed (status: ${result.status.description})`;
+      return { results: [], error: errMsg, errorType };
     } catch (err: any) {
       logger.error({ err }, 'Judge0 request failed');
       const msg = err.name === 'AbortError' ? 'Execution timed out after 30s' : err.message || 'Execution service unreachable';

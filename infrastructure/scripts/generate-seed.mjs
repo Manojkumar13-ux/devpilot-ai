@@ -6,25 +6,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const q = s => '`' + s.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\n/g, '\\n') + '`';
 
-const scPlaceholder = (fn, sig) => `// TODO: implement\n${fn === 'def' ? '    pass' : fn === 'pub fn' ? 'unimplemented!()' : fn === 'func' ? 'return nil' : ''}`;
-
-// Generate TODO placeholder starter code based on function signature and language
-function stub(sig, lang) {
-  const sigs = {
-    javascript: `function ${sig} {\n  // TODO: implement\n}`,
-    typescript: `function ${sig} {\n  // TODO: implement\n}`,
-    python: `def ${sig}:\n    # TODO: implement\n    pass`,
-    java: `class Solution {\n  ${sig} {\n    // TODO: implement\n    ${sig.includes('int') ? 'return 0' : sig.includes('String') ? 'return ""' : sig.includes('boolean') || sig.includes('bool') ? 'return false' : 'return null'};\n  }\n}`,
-    cpp: `class Solution {\npublic:\n  ${sig} {\n    // TODO: implement\n    ${sig.startsWith('int') ? 'return 0' : sig.startsWith('string') ? 'return ""' : sig.startsWith('bool') ? 'return false' : sig.startsWith('ListNode') || sig.startsWith('TreeNode') || sig.startsWith('Node') ? 'return nullptr' : sig.startsWith('vector') ? 'return {}' : sig.startsWith('char') ? 'return 0' : sig.startsWith('void') ? 'return' : ''};\n  }\n};`,
-    c: `${sig} {\n  // TODO: implement\n  ${sig.startsWith('int') ? 'return 0' : sig.startsWith('char') ? 'return NULL' : sig.startsWith('bool') ? 'return false' : sig.startsWith('void') ? 'return' : 'return 0'};\n}`,
-    go: `func ${sig} {\n  // TODO: implement\n  ${sig.includes(')') && !sig.includes('bool') ? sig.endsWith(')') ? '' : 'return nil' : ''}\n}`,
-    rust: `pub fn ${sig} {\n  // TODO: implement\n  unimplemented!()\n}`,
-  };
-  return sigs[lang] || '';
-}
-
-const sc = (js, py, java, cpp, go, ts, c, rust) =>
-  `sc(\n    ${[js,py,java,cpp,go,ts,c,rust].map(s => q(s)).join(',\n    ')}\n  )`;
+const sc = (py, java, cpp, c) =>
+  `sc(\n    ${[py,java,cpp,c].map(s => q(s)).join(',\n    ')}\n  )`;
 
 const tc = (input, expected, hidden = false) =>
   hidden
@@ -174,15 +157,11 @@ const header = `import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const sc = (js: string, py: string, java: string, cpp: string, go: string, ts: string, c: string, rust: string) => ({
-  javascript: js.trim(),
+const sc = (py: string, java: string, cpp: string, c: string) => ({
   python: py.trim(),
   java: java.trim(),
   cpp: cpp.trim(),
-  go: go.trim(),
-  typescript: ts.trim(),
   c: c.trim(),
-  rust: rust.trim(),
 });
 
 const tc = (input: unknown, expected: unknown, hidden = false) => ({
@@ -239,8 +218,6 @@ const footer = [
   '  .finally(() => prisma.$disconnect());',
 ].join('\n');
 
-const langs = ['javascript','typescript','python','java','cpp','c','go','rust'];
-
 // sigMap order: [js(0), py(1), java(2), cpp(3), go(4), ts(5), c(6), rust(7)]
 function genProblem(p) {
   const [slug, title, difficulty, category, description, ...extras] = p;
@@ -254,35 +231,68 @@ function genProblem(p) {
   const sigs = sigMap[slug];
   const tests = testData[slug];
 
-  // sigMap indices: [js(0), py(1), java(2), cpp(3), go(4), ts(5), c(6), rust(7)]
-  const jsStub = `function ${sigs[0]} {\n  // TODO: implement\n}`;
-  const pyStub = `def ${sigs[1]}:\n    # TODO: implement\n    pass`;
+  const pySig = sigs[1];
   const javaMethod = sigs[2];
   const cppMethod = sigs[3];
-  const goSig = sigs[4];
-  const tsStub = `function ${sigs[5]} {\n  // TODO: implement\n}`;
   const cSig = sigs[6];
-  const rustSig = sigs[7];
 
-  // Java stub
-  const javaRet = javaMethod.includes('int') && !javaMethod.startsWith('int[') ? 'return 0' : javaMethod.startsWith('int[') ? 'return new int[0]' : javaMethod.startsWith('boolean') || javaMethod.startsWith('public boolean') ? 'return false' : javaMethod.includes('String') ? 'return ""' : javaMethod.includes('List') ? 'return new ArrayList<>()' : javaMethod.includes('void') || javaMethod.includes('MyQueue') ? '' : 'return null';
+  // Python stub
+  const pyStub = `def ${pySig}:\n    # TODO: implement\n    pass`;
+
+  // Java stub — detect return type from the full signature (may start with 'public ')
+  const jm = javaMethod; // e.g. "public int[] twoSum(int[] nums, int target)"
+  const jmBody = jm.replace('public ', '');
+  const javaRet =
+    /^int\[\]/.test(jmBody) ? 'return new int[0]' :
+    /^int\b/.test(jmBody) ? 'return 0' :
+    /^boolean/.test(jmBody) ? 'return false' :
+    /^void/.test(jmBody) ? '' :
+    /^char\[\]/.test(jmBody) || /^String\[\]/.test(jmBody) ? 'return null' :
+    /^char\b/.test(jmBody) ? 'return \'\\0\'' :
+    /^String\b/.test(jmBody) ? 'return ""' :
+    /^List/.test(jmBody) ? 'return new ArrayList<>()' :
+    /^ListNode/.test(jmBody) ? 'return null' :
+    /^TreeNode/.test(jmBody) ? 'return null' :
+    /^double/.test(jmBody) ? 'return 0.0' :
+    'return 0';
   const javaStub = `class Solution {\n  ${javaMethod} {\n    // TODO: implement\n    ${javaRet};\n  }\n}`;
 
   // C++ stub
-  const cppType = cppMethod.startsWith('int') ? 'int' : cppMethod.startsWith('bool') ? 'bool' : cppMethod.startsWith('string') ? 'string' : cppMethod.startsWith('vector') ? 'vector' : cppMethod.startsWith('ListNode') || cppMethod.startsWith('TreeNode') || cppMethod.startsWith('Node') ? '' : cppMethod.startsWith('void') ? 'void' : 'auto';
-  const cppRet = cppType === 'int' ? 'return 0' : cppType === 'bool' ? 'return false' : cppType === 'string' ? 'return ""' : cppType === 'vector' ? 'return {}' : cppType === 'void' ? '' : 'return nullptr';
+  const cppType =
+    /^int\b/.test(cppMethod) ? 'int' :
+    /^bool\b/.test(cppMethod) ? 'bool' :
+    /^string\b/.test(cppMethod) ? 'string' :
+    /^vector/.test(cppMethod) ? 'vector' :
+    /^ListNode/.test(cppMethod) || /^TreeNode/.test(cppMethod) || /^Node/.test(cppMethod) ? 'ptr' :
+    /^void/.test(cppMethod) ? 'void' :
+    /^char\b/.test(cppMethod) ? 'char' :
+    /^double\b/.test(cppMethod) ? 'double' :
+    'auto';
+  const cppRet =
+    cppType === 'int' ? 'return 0' :
+    cppType === 'bool' ? 'return false' :
+    cppType === 'string' ? 'return ""' :
+    cppType === 'vector' ? 'return {}' :
+    cppType === 'ptr' ? 'return nullptr' :
+    cppType === 'void' ? '' :
+    cppType === 'char' ? 'return \'\\0\'' :
+    cppType === 'double' ? 'return 0.0' :
+    'return {}';
   const cppStub = `class Solution {\npublic:\n  ${cppMethod} {\n    // TODO: implement\n    ${cppRet};\n  }\n};`;
 
-  // Go stub
-  const goRet = goSig.includes('int') && !goSig.includes('[]int') ? 'return 0' : goSig.includes('[]int') ? 'return nil' : goSig.includes('bool') ? 'return false' : goSig.includes('[][]') ? 'return nil' : goSig.includes('string') ? 'return ""' : goSig.includes('*ListNode') || goSig.includes('*TreeNode') || goSig.includes('*Node') ? 'return nil' : '';
-  const goStub = `func ${goSig} {\n  // TODO: implement\n  ${goRet}\n}`;
-
   // C stub
-  const cRet = cSig.startsWith('int') && !cSig.startsWith('int*') ? 'return 0' : cSig.startsWith('int*') || cSig.startsWith('char*') ? 'return NULL' : cSig.startsWith('bool') ? 'return false' : cSig.startsWith('void') ? '' : 'return 0';
+  const cRet =
+    /^int\b(?!\*)/.test(cSig) ? 'return 0' :
+    /^int\*/.test(cSig) ? 'return NULL' :
+    /^char\*/.test(cSig) ? 'return NULL' :
+    /^bool\b/.test(cSig) ? 'return false' :
+    /^void/.test(cSig) ? '' :
+    /^char\b/.test(cSig) ? 'return \'\\0\'' :
+    /^double\b/.test(cSig) ? 'return 0.0' :
+    /^struct ListNode/.test(cSig) ? 'return NULL' :
+    /^struct TreeNode/.test(cSig) ? 'return NULL' :
+    'return 0';
   const cStub = `${cSig} {\n  // TODO: implement\n  ${cRet};\n}`;
-
-  // Rust stub
-  const rustStub = `pub fn ${rustSig} {\n  // TODO: implement\n  unimplemented!()\n}`;
 
   return `  {
     slug: ${q(slug)},
@@ -301,14 +311,10 @@ function genProblem(p) {
     submissionCount: 0,
     isPublished: true,
     starterCode: sc(
-      ${q(jsStub)},
       ${q(pyStub)},
       ${q(javaStub)},
       ${q(cppStub)},
-      ${q(goStub)},
-      ${q(tsStub)},
       ${q(cStub)},
-      ${q(rustStub)},
     ),
     testCases: [
       ${tests.map(t => tc(t[0], t[1], t[2])).join(',\n      ')},
