@@ -137,6 +137,44 @@ function generatePyRunner(
   fn: string,
   testCasesJson: string
 ): { files: Record<string, string>; command: string } {
+  const classMatch = code.match(/^class\s+(\w+)/m);
+  const className = classMatch ? classMatch[1] : '';
+
+  // For class-based LeetCode design problems (MyQueue, MinStack, LRUCache, etc.)
+  if (className) {
+    const runner = `
+import json, time, sys
+${code}
+test_cases = ${testCasesJson}
+results = []
+for tc in test_cases:
+    start = time.time()
+    try:
+        inp = json.loads(tc["input"])
+        ops = inp["ops"]
+        args_list = inp["args"]
+        obj = None
+        out = []
+        for op, arg in zip(ops, args_list):
+            if op == "${className}":
+                obj = ${className}(*arg)
+                out.append(None)
+            else:
+                method = getattr(obj, op)
+                val = method(*arg)
+                out.append(val)
+        result = out
+        elapsed = (time.time() - start) * 1000
+        pass_val = json.dumps(result, default=str) == json.dumps(json.loads(tc["expectedOutput"]), default=str)
+        results.append({"pass": pass_val, "runtime": round(elapsed, 2), "memory": 0, "error": None, "expected": tc["expectedOutput"], "actual": json.dumps(result, default=str)})
+    except Exception as e:
+        results.append({"pass": False, "runtime": 0, "memory": 0, "error": str(e), "expected": tc["expectedOutput"], "actual": None})
+print(json.dumps({"results": results}))
+`;
+    return { files: { "runner.py": runner }, command: `python3 ${WORK_DIR}/runner.py` };
+  }
+
+  // Standard function-based runner
   const runner = `
 import json, time, sys
 ${code}
@@ -145,8 +183,8 @@ results = []
 for tc in test_cases:
     start = time.time()
     try:
-        args = json.loads(tc["input"])
-        result = ${fn}(**args)
+        inp = json.loads(tc["input"])
+        result = ${fn}(**inp)
         elapsed = (time.time() - start) * 1000
         pass_val = json.dumps(result, default=str) == json.dumps(json.loads(tc["expectedOutput"]), default=str)
         results.append({"pass": pass_val, "runtime": round(elapsed, 2), "memory": 0, "error": None, "expected": tc["expectedOutput"], "actual": json.dumps(result, default=str)})
