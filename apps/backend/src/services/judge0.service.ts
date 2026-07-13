@@ -62,8 +62,21 @@ export class Judge0Service {
       const result = await res.json() as Judge0Response;
 
       if (result.status.id !== 3) {
-        const errMsg = result.stderr || result.compile_output || `Execution failed (status: ${result.status.description})`;
-        return { results: [], error: errMsg, errorType: 'runtime_error' };
+        const statusId = result.status.id;
+        const compileOut = result.compile_output || '';
+        const stdErr = result.stderr || '';
+        let errorType = 'runtime_error';
+
+        if (statusId === 5) {
+          errorType = 'timeout_error';
+        } else if (statusId === 6) {
+          errorType = 'compilation_error';
+        } else if (statusId === 10 || statusId === 11) {
+          errorType = 'internal_error';
+        }
+
+        const errMsg = compileOut || stdErr || `Execution failed (status: ${result.status.description})`;
+        return { results: [], error: errMsg, errorType };
       }
 
       try {

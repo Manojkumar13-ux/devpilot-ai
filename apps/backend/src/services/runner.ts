@@ -40,14 +40,19 @@ function extractFunctionName(code: string, language: string): string | null {
     case "python":
       return code.match(/def\s+(\w+)/)?.[1] ?? null;
     case "java": {
-      const m = code.match(/public\s+\S+\s+(\w+)\s*\(/);
-      if (m && m[1] !== "Solution") return m[1];
-      const m2 = code.match(/(\w+)\s*\([^)]*\)\s*\{/);
-      return m2?.[1] ?? null;
+      const skip = new Set(['main', 'toString', 'hashCode', 'equals', 'Solution']);
+      const methods = [...code.matchAll(/(?:public\s+\S+\s+)?(\w+)\s*\([^)]*\)\s*(?:\{|throws)/g)];
+      const candidates = methods.filter(m => !skip.has(m[1]));
+      if (candidates.length > 0) return candidates[candidates.length - 1][1];
+      const fallback = code.match(/(\w+)\s*\([^)]*\)\s*\{/);
+      return fallback?.[1] ?? null;
     }
     case "cpp": {
-      const m = code.match(/(\w+)\s*\([^)]*\)\s*\{/);
-      return m?.[1] ?? code.match(/auto\s+(\w+)\s*=/)?.[1] ?? null;
+      const skip = new Set(['main']);
+      const methods = [...code.matchAll(/(\w+)\s*\([^)]*\)\s*(?:\{|const)/g)];
+      const candidates = methods.filter(m => !skip.has(m[1]));
+      if (candidates.length > 0) return candidates[candidates.length - 1][1];
+      return code.match(/auto\s+(\w+)\s*=/)?.[1] ?? null;
     }
     case "c": {
       const m = code.match(/(\w+)\s*\([^)]*\)\s*\{/);
@@ -98,6 +103,101 @@ function generateJsRunner(
   fn: string,
   testCasesJson: string
 ): { files: Record<string, string>; command: string } {
+  let isDesignProblem = false;
+  let className = '';
+  try {
+    const tcs = JSON.parse(testCasesJson);
+    if (tcs.length > 0) {
+      const firstInput = JSON.parse(tcs[0].input);
+      isDesignProblem = firstInput && typeof firstInput === 'object' && 'ops' in firstInput && 'args' in firstInput;
+    }
+    const classMatch = code.match(/(?:class\s+(\w+))/);
+    if (classMatch) className = classMatch[1];
+  } catch {}
+
+  if (isDesignProblem) {
+    const runner = `
+const fs = require('fs');
+${code}
+const testCases = ${testCasesJson};
+const deepEq = (a, b) => {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => deepEq(v, b[i]));
+  if (typeof a === 'object' && typeof b === 'object') {
+    const ka = Object.keys(a);
+    return ka.length === Object.keys(b).length && ka.every(k => deepEq(a[k], b[k]));
+  }
+  return false;
+};
+const results = [];
+for (const tc of testCases) {
+  const start = process.hrtime.bigint();
+  try {
+    const inp = JSON.parse(tc.input);
+    const ops = inp.ops;
+    const argsList = inp.args;
+    let obj = null;
+    const out = [];
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      const arg = argsList[i];
+      if (op === "${className}") {
+        obj = new ${className}(...arg);
+        out.push(null);
+      } else {
+        const val = obj[op](...arg);
+        out.push(val !== undefined ? val : null);
+      }
+    }
+    const end = process.hrtime.bigint();
+    const rt = Number(end - start) / 1e6;
+    const pass = deepEq(out, JSON.parse(tc.expectedOutput));
+    results.push({ pass, runtime: Math.round(rt * 100) / 100, memory: 0, error: null, expected: tc.expectedOutput, actual: JSON.stringify(out) });
+  } catch (e) {
+    results.push({ pass: false, runtime: 0, memory: 0, error: e.message || String(e), expected: tc.expectedOutput, actual: null });
+  }
+}
+process.stdout.write(JSON.stringify({ results }));
+`;
+    return { files: { "runner.js": runner }, command: `node ${WORK_DIR}/runner.js` };
+  }
+
+  if (className) {
+    const runner = `
+const fs = require('fs');
+${code}
+const testCases = ${testCasesJson};
+const deepEq = (a, b) => {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => deepEq(v, b[i]));
+  if (typeof a === 'object' && typeof b === 'object') {
+    const ka = Object.keys(a);
+    return ka.length === Object.keys(b).length && ka.every(k => deepEq(a[k], b[k]));
+  }
+  return false;
+};
+const results = [];
+for (const tc of testCases) {
+  const start = process.hrtime.bigint();
+  try {
+    const args = Object.values(JSON.parse(tc.input));
+    const sol = new ${className}();
+    const result = sol.${fn}(...args);
+    const end = process.hrtime.bigint();
+    const rt = Number(end - start) / 1e6;
+    const pass = deepEq(result, JSON.parse(tc.expectedOutput));
+    results.push({ pass, runtime: Math.round(rt * 100) / 100, memory: 0, error: null, expected: tc.expectedOutput, actual: JSON.stringify(result) });
+  } catch (e) {
+    results.push({ pass: false, runtime: 0, memory: 0, error: e.message || String(e), expected: tc.expectedOutput, actual: null });
+  }
+}
+process.stdout.write(JSON.stringify({ results }));
+`;
+    return { files: { "runner.js": runner }, command: `node ${WORK_DIR}/runner.js` };
+  }
+
   const runner = `
 const fs = require('fs');
 ${code}
@@ -140,8 +240,18 @@ function generatePyRunner(
   const classMatch = code.match(/^class\s+(\w+)/m);
   const className = classMatch ? classMatch[1] : '';
 
-  // For class-based LeetCode design problems (MyQueue, MinStack, LRUCache, etc.)
-  if (className) {
+  // Detect design problem: test case input has ops/args format
+  let isDesignProblem = false;
+  try {
+    const tcs = JSON.parse(testCasesJson);
+    if (tcs.length > 0) {
+      const firstInput = JSON.parse(tcs[0].input);
+      isDesignProblem = firstInput && typeof firstInput === 'object' && 'ops' in firstInput && 'args' in firstInput;
+    }
+  } catch {}
+
+  // Design/class problems (LRU Cache, Min Stack, MyQueue, etc.) — ops/args pattern
+  if (isDesignProblem) {
     const runner = `
 import json, time, sys
 ${code}
@@ -174,7 +284,30 @@ print(json.dumps({"results": results}))
     return { files: { "runner.py": runner }, command: `python3 ${WORK_DIR}/runner.py` };
   }
 
-  // Standard function-based runner
+  // Class-based function problem (e.g., class Solution: def twoSum)
+  if (className) {
+    const runner = `
+import json, time, sys
+${code}
+test_cases = ${testCasesJson}
+results = []
+for tc in test_cases:
+    start = time.time()
+    try:
+        inp = json.loads(tc["input"])
+        sol = ${className}()
+        result = sol.${fn}(**inp)
+        elapsed = (time.time() - start) * 1000
+        pass_val = json.dumps(result, default=str) == json.dumps(json.loads(tc["expectedOutput"]), default=str)
+        results.append({"pass": pass_val, "runtime": round(elapsed, 2), "memory": 0, "error": None, "expected": tc["expectedOutput"], "actual": json.dumps(result, default=str)})
+    except Exception as e:
+        results.append({"pass": False, "runtime": 0, "memory": 0, "error": str(e), "expected": tc["expectedOutput"], "actual": None})
+print(json.dumps({"results": results}))
+`;
+    return { files: { "runner.py": runner }, command: `python3 ${WORK_DIR}/runner.py` };
+  }
+
+  // Bare function (no class) — e.g. from custom problems
   const runner = `
 import json, time, sys
 ${code}
@@ -201,69 +334,20 @@ function generateJavaRunner(
   fn: string,
   testCasesJson: string
 ): { files: Record<string, string>; command: string } {
-  const harness = `
-import java.util.*;
-import java.io.*;
-import java.nio.file.*;
-import java.lang.reflect.*;
+  const classMatch = code.match(/(?:public\s+)?class\s+(\w+)/);
+  const className = classMatch ? classMatch[1] : 'Solution';
 
-public class Runner {
-  private static final String TD = "${WORK_DIR}";
-  static List<Map<String, Object>> testCases;
-  private static Method solutionMethod;
-  private static Class<?>[] paramTypes;
-  private static Class<?> returnType;
-
-  public static void main(String[] args) throws Exception {
-    Solution sol = new Solution();
-    solutionMethod = sol.getClass().getDeclaredMethods()[0];
-    paramTypes = solutionMethod.getParameterTypes();
-    returnType = solutionMethod.getReturnType();
-
-    String content = new String(Files.readAllBytes(Paths.get(TD + "/testcases.json")));
-    testCases = parseTests(content);
-    List<Map<String, Object>> results = new ArrayList<>();
-    for (Map<String, Object> tc : testCases) {
-      long start = System.nanoTime();
-      try {
-        Object rawInput = tc.get("input");
-        Map<String, Object> input;
-        if (rawInput instanceof String) {
-          Map<String, Object> parsed = parseObj((String) rawInput);
-          input = parsed.isEmpty() ? parseTests((String) rawInput).get(0) : parsed;
-        } else {
-          input = (Map<String, Object>) rawInput;
-        }
-        Object[] invokeArgs = new Object[paramTypes.length];
-        int idx = 0;
-        for (Map.Entry<String, Object> e : input.entrySet()) {
-          invokeArgs[idx] = convert(e.getValue(), paramTypes[idx]);
-          idx++;
-        }
-        Object result = solutionMethod.invoke(sol, invokeArgs);
-        long end = System.nanoTime();
-        double rt = (end - start) / 1_000_000.0;
-        String expected = (String) tc.get("expectedOutput");
-        String actual = toJson(result);
-        boolean pass = actual.equals(expected);
-        Map<String, Object> r = new LinkedHashMap<>();
-        r.put("pass", pass); r.put("runtime", Math.round(rt * 100) / 100.0);
-        r.put("memory", 0); r.put("error", null);
-        r.put("expected", expected); r.put("actual", actual);
-        results.add(r);
-      } catch (Exception e) {
-        Map<String, Object> r = new LinkedHashMap<>();
-        r.put("pass", false); r.put("runtime", 0); r.put("memory", 0);
-        r.put("error", e.getMessage() == null ? "Runtime error" : e.getMessage());
-        r.put("expected", tc.get("expectedOutput")); r.put("actual", null);
-        results.add(r);
-      }
+  let isDesignProblem = false;
+  try {
+    const tcs = JSON.parse(testCasesJson);
+    if (tcs.length > 0) {
+      const firstInput = JSON.parse(tcs[0].input);
+      isDesignProblem = firstInput && typeof firstInput === 'object' && 'ops' in firstInput && 'args' in firstInput;
     }
-    Map<String, Object> out = new LinkedHashMap<>();
-    out.put("results", results);
-    System.out.println(toJson(out));
-  }
+  } catch {}
 
+  // ---- Shared Helpers (injected into every Java runner) ----
+  const sharedHelpers = `
   static Object convert(Object val, Class<?> target) {
     if (val == null) return null;
     if (target == int.class || target == Integer.class) return ((Number) val).intValue();
@@ -302,7 +386,6 @@ public class Runner {
       List<?> list = (List<?>) val;
       try {
         Constructor<?> ctor = target.getDeclaredConstructor(int.class);
-        Object dummy = target.getDeclaredConstructor().newInstance();
         Field valField = target.getDeclaredField("val");
         Field nextField = target.getDeclaredField("next");
         Object head = null, prev = null;
@@ -338,6 +421,9 @@ public class Runner {
     if (val instanceof List) return val;
     return val;
   }
+
+  static String escape(String s) { return s.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\\""); }
+  static List<Integer> toList(int[] arr) { List<Integer> list = new ArrayList<>(); for (int v : arr) list.add(v); return list; }
 
   static List<Map<String, Object>> parseTests(String json) {
     List<Map<String, Object>> result = new ArrayList<>();
@@ -493,13 +579,182 @@ public class Runner {
     return o.toString();
   }
 
-  static String escape(String s) { return s.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\\""); }
-  static List<Integer> toList(int[] arr) { List<Integer> list = new ArrayList<>(); for (int v : arr) list.add(v); return list; }
+  static String normalizeJson(String s) {
+    s = s.trim();
+    try {
+      ParseResult pr = parseValue(s, 0);
+      if (pr.end >= s.length()) {
+        return toJson(pr.value);
+      }
+    } catch (Exception e) { /* fall through to return s unchanged */ }
+    return s;
+  }
+`;
+
+  if (isDesignProblem) {
+    const harness = `
+import java.util.*;
+import java.io.*;
+import java.nio.file.*;
+import java.lang.reflect.*;
+
+public class Runner {
+  private static final String TD = "${WORK_DIR}";
+
+  public static void main(String[] args) throws Exception {
+    String content = new String(Files.readAllBytes(Paths.get(TD + "/testcases.json")));
+    List<Map<String, Object>> testCases = parseTests(content);
+    List<Map<String, Object>> results = new ArrayList<>();
+    for (Map<String, Object> tc : testCases) {
+      long start = System.nanoTime();
+      try {
+        String inputJson = (String) tc.get("input");
+        Map<String, Object> parsed = parseObj(inputJson);
+        @SuppressWarnings("unchecked")
+        List<String> ops = (List<String>) parsed.get("ops");
+        @SuppressWarnings("unchecked")
+        List<List<Object>> argsList = (List<List<Object>>) parsed.get("args");
+        Object obj = null;
+        List<Object> out = new ArrayList<>();
+        for (int i = 0; i < ops.size(); i++) {
+          String op = ops.get(i);
+          List<Object> arg = argsList.get(i);
+          if (op.equals("${className}")) {
+            Constructor<?>[] ctors = ${className}.class.getDeclaredConstructors();
+            Constructor<?> ctor = ctors[0];
+            Class<?>[] paramTypes = ctor.getParameterTypes();
+            Object[] convertedArgs = new Object[arg.size()];
+            for (int j = 0; j < arg.size(); j++) convertedArgs[j] = convert(arg.get(j), paramTypes[j]);
+            obj = ctor.newInstance(convertedArgs);
+            out.add(null);
+          } else {
+            Method method = findMethod(obj.getClass(), op);
+            if (method != null) {
+              Class<?>[] paramTypes = method.getParameterTypes();
+              Object[] convertedArgs = new Object[arg.size()];
+              for (int j = 0; j < arg.size(); j++) convertedArgs[j] = convert(arg.get(j), paramTypes[j]);
+              Object result = method.invoke(obj, convertedArgs);
+              out.add(result);
+            } else {
+              out.add(null);
+            }
+          }
+        }
+        long end = System.nanoTime();
+        double rt = (end - start) / 1_000_000.0;
+        String expected = normalizeJson((String) tc.get("expectedOutput"));
+        String actual = toJson(out);
+        boolean pass = actual.equals(expected);
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("pass", pass); r.put("runtime", Math.round(rt * 100) / 100.0);
+        r.put("memory", 0); r.put("error", null);
+        r.put("expected", expected); r.put("actual", actual);
+        results.add(r);
+      } catch (Exception e) {
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("pass", false); r.put("runtime", 0); r.put("memory", 0);
+        r.put("error", e.getMessage() == null ? "Runtime error" : e.getMessage());
+        r.put("expected", tc.get("expectedOutput")); r.put("actual", null);
+        results.add(r);
+      }
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("results", results);
+    System.out.println(toJson(out));
+  }
+
+  static Method findMethod(Class<?> clazz, String name) {
+    for (Method m : clazz.getMethods()) {
+      if (m.getName().equals(name)) return m;
+    }
+    return null;
+  }
+
+${sharedHelpers}
+}
+`;
+    return {
+      files: {
+        "Solution.java": code.replace("public class " + className, "class " + className),
+        "Runner.java": harness,
+        "testcases.json": testCasesJson,
+      },
+      command: `javac -d ${WORK_DIR} ${WORK_DIR}/Solution.java ${WORK_DIR}/Runner.java && java -cp ${WORK_DIR} Runner`,
+    };
+  }
+
+  // ---- Function problem runner ----
+  const harness = `
+import java.util.*;
+import java.io.*;
+import java.nio.file.*;
+import java.lang.reflect.*;
+
+public class Runner {
+  private static final String TD = "${WORK_DIR}";
+
+  public static void main(String[] args) throws Exception {
+    ${className} sol = new ${className}();
+    Method solutionMethod = null;
+    for (Method m : sol.getClass().getDeclaredMethods()) {
+      if (m.getName().equals("${fn}")) {
+        solutionMethod = m;
+        break;
+      }
+    }
+    if (solutionMethod == null) throw new NoSuchMethodException("${fn}");
+    Class<?>[] paramTypes = solutionMethod.getParameterTypes();
+
+    String content = new String(Files.readAllBytes(Paths.get(TD + "/testcases.json")));
+    List<Map<String, Object>> testCases = parseTests(content);
+    List<Map<String, Object>> results = new ArrayList<>();
+    for (Map<String, Object> tc : testCases) {
+      long start = System.nanoTime();
+      try {
+        Object rawInput = tc.get("input");
+        Map<String, Object> input;
+        if (rawInput instanceof String) {
+          Map<String, Object> parsed = parseObj((String) rawInput);
+          input = parsed.isEmpty() ? parseTests((String) rawInput).get(0) : parsed;
+        } else {
+          input = (Map<String, Object>) rawInput;
+        }
+        Object[] invokeArgs = new Object[paramTypes.length];
+        int idx = 0;
+        for (Map.Entry<String, Object> e : input.entrySet()) {
+          invokeArgs[idx] = convert(e.getValue(), paramTypes[idx]);
+          idx++;
+        }
+        Object result = solutionMethod.invoke(sol, invokeArgs);
+        long end = System.nanoTime();
+        double rt = (end - start) / 1_000_000.0;
+        String expected = normalizeJson((String) tc.get("expectedOutput"));
+        String actual = toJson(result);
+        boolean pass = actual.equals(expected);
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("pass", pass); r.put("runtime", Math.round(rt * 100) / 100.0);
+        r.put("memory", 0); r.put("error", null);
+        r.put("expected", expected); r.put("actual", actual);
+        results.add(r);
+      } catch (Exception e) {
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("pass", false); r.put("runtime", 0); r.put("memory", 0);
+        r.put("error", e.getMessage() == null ? "Runtime error" : e.getMessage());
+        r.put("expected", tc.get("expectedOutput")); r.put("actual", null);
+        results.add(r);
+      }
+    }
+    Map<String, Object> out = new LinkedHashMap<>();
+    out.put("results", results);
+    System.out.println(toJson(out));
+  }
+
+${sharedHelpers}
 }
 `;
   return {
     files: {
-      "Solution.java": code.replace("public class Solution", "class Solution"),
+      "Solution.java": code.replace("public class Solution", "class " + className),
       "Runner.java": harness,
       "testcases.json": testCasesJson,
     },
@@ -544,20 +799,23 @@ function generateCppRunner(
     return `int ${name} = stoi(inputVal["${name}"]);`;
   }
 
-  function serResult(val: unknown, indent: string): string {
-    if (Array.isArray(val)) {
-      if (val.length > 0 && Array.isArray(val[0])) return `toJsonVecVecInt(result)`;
-      if (val.length > 0 && typeof val[0] === "string") return `toJsonVecStr(result)`;
+  function serResultFromExpected(expected: string): string {
+    const trimmed = expected.trim();
+    if (trimmed.startsWith('[')) {
+      if (trimmed.includes('[')) return `toJsonVecVecInt(result)`;
+      if (trimmed.includes('"') || trimmed.includes("\\\\")) return `toJsonVecStr(result)`;
       return `toJsonVecInt(result)`;
     }
-    if (typeof val === "string") return `"\\"" + escapeJson(result) + "\\""`;
-    if (typeof val === "boolean") return `result ? "true" : "false"`;
+    if (trimmed.startsWith('"')) return `"\\"" + escapeJson(result) + "\\""`;
+    if (trimmed === 'true' || trimmed === 'false' || trimmed === 'null') return `result ? "true" : "false"`;
+    if (trimmed.includes('.')) return `to_string(result)`;
     return `to_string(result)`;
   }
 
   const argExtract = argKeys.map((k, i) => extractJson(k, argVals[i])).join("\n      ");
   const argCall = argKeys.join(", ");
-  const serCode = argVals.length > 0 ? serResult(argVals[0], "") : "to_string(result)";
+  const firstExpected = testCases.length > 0 ? testCases[0].expectedOutput : "";
+  const serCode = firstExpected ? serResultFromExpected(firstExpected) : "to_string(result)";
 
   const runner = `
 #include <iostream>
@@ -988,9 +1246,125 @@ function generateTsRunner(
   fn: string,
   testCasesJson: string
 ): { files: Record<string, string>; command: string } {
+  // Strip TypeScript type annotations to produce valid JS.
+  // Order matters: more specific patterns must come before generic ones.
+  const stripTypes = (ts: string): string =>
+    ts
+      .replace(/export\s+(default\s+)?class/g, 'class')
+      .replace(/export\s+(default\s+)?function/g, 'function')
+      .replace(/export\s+(default\s+)?const/g, 'const')
+      .replace(/export\s+(default\s+)?let/g, 'let')
+      .replace(/export\s+(default\s+)?var/g, 'var')
+      .replace(/:?\s*:\s*Array\s*<[^>]+>/g, '')
+      .replace(/:?\s*:\s*\w+\s*\[\s*\]/g, '[]')
+      .replace(/:?\s*:\s*\w+/g, '')
+      .replace(/^(\s*)public\s+/gm, '$1')
+      .replace(/^(\s*)private\s+/gm, '$1')
+      .replace(/^(\s*)protected\s+/gm, '$1')
+      .replace(/^(\s*)readonly\s+/gm, '$1')
+      .replace(/\s+as\s+\w+/g, '')
+      .replace(/<[^>]+>/g, '');
+
+  const cleaned = stripTypes(code);
+
+  let isDesignProblem = false;
+  let className = '';
+  try {
+    const tcs = JSON.parse(testCasesJson);
+    if (tcs.length > 0) {
+      const firstInput = JSON.parse(tcs[0].input);
+      isDesignProblem = firstInput && typeof firstInput === 'object' && 'ops' in firstInput && 'args' in firstInput;
+    }
+    const classMatch = cleaned.match(/(?:class\s+(\w+))/);
+    if (classMatch) className = classMatch[1];
+  } catch {}
+
+  if (isDesignProblem) {
+    const runner = `
+const fs = require('fs');
+${cleaned}
+const testCases = ${testCasesJson};
+const deepEq = (a, b) => {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => deepEq(v, b[i]));
+  if (typeof a === 'object' && typeof b === 'object') {
+    const ka = Object.keys(a);
+    return ka.length === Object.keys(b).length && ka.every(k => deepEq(a[k], b[k]));
+  }
+  return false;
+};
+const results = [];
+for (const tc of testCases) {
+  const start = process.hrtime.bigint();
+  try {
+    const inp = JSON.parse(tc.input);
+    const ops = inp.ops;
+    const argsList = inp.args;
+    let obj = null;
+    const out = [];
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      const arg = argsList[i];
+      if (op === "${className}") {
+        obj = new ${className}(...arg);
+        out.push(null);
+      } else {
+        const val = obj[op](...arg);
+        out.push(val !== undefined ? val : null);
+      }
+    }
+    const end = process.hrtime.bigint();
+    const rt = Number(end - start) / 1e6;
+    const pass = deepEq(out, JSON.parse(tc.expectedOutput));
+    results.push({ pass, runtime: Math.round(rt * 100) / 100, memory: 0, error: null, expected: tc.expectedOutput, actual: JSON.stringify(out) });
+  } catch (e) {
+    results.push({ pass: false, runtime: 0, memory: 0, error: e.message || String(e), expected: tc.expectedOutput, actual: null });
+  }
+}
+process.stdout.write(JSON.stringify({ results }));
+`;
+    return { files: { "runner.js": runner }, command: `node ${WORK_DIR}/runner.js` };
+  }
+
+  if (className) {
+    const runner = `
+const fs = require('fs');
+${cleaned}
+const testCases = ${testCasesJson};
+const deepEq = (a, b) => {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => deepEq(v, b[i]));
+  if (typeof a === 'object' && typeof b === 'object') {
+    const ka = Object.keys(a);
+    return ka.length === Object.keys(b).length && ka.every(k => deepEq(a[k], b[k]));
+  }
+  return false;
+};
+const results = [];
+for (const tc of testCases) {
+  const start = process.hrtime.bigint();
+  try {
+    const args = Object.values(JSON.parse(tc.input));
+    const sol = new ${className}();
+    const result = sol.${fn}(...args);
+    const end = process.hrtime.bigint();
+    const rt = Number(end - start) / 1e6;
+    const pass = deepEq(result, JSON.parse(tc.expectedOutput));
+    results.push({ pass, runtime: Math.round(rt * 100) / 100, memory: 0, error: null, expected: tc.expectedOutput, actual: JSON.stringify(result) });
+  } catch (e) {
+    results.push({ pass: false, runtime: 0, memory: 0, error: e.message || String(e), expected: tc.expectedOutput, actual: null });
+  }
+}
+process.stdout.write(JSON.stringify({ results }));
+`;
+    return { files: { "runner.js": runner }, command: `node ${WORK_DIR}/runner.js` };
+  }
+
   const runner = `
 const fs = require('fs');
-${code.replace(/export\s+(default\s+)?function/g, 'function').replace(/export\s+(default\s+)?const/g, 'const').replace(/:\s*\w+/g, '').replace(/:\s*\w+\[\]/g, '[]').replace(/:\s*Array<\w+>/g, '')}
+${cleaned}
 const testCases = ${testCasesJson};
 const deepEq = (a, b) => {
   if (a === b) return true;
@@ -1042,7 +1416,10 @@ function generateCRunner(
 
   const argExtract = argKeys.map((k, i) => extractC(k, argVals[i])).join("\n    ");
   const argCall = argKeys.map((k, i) => Array.isArray(argVals[i]) ? `${k}, ${k}Size` : k).join(", ") + (argKeys.length > 0 ? ", &_returnSize" : "");
-  const isArrayReturn = testCases.length > 0 && testCases[0].expectedOutput.trim().startsWith('[');
+  const firstExpected = testCases.length > 0 ? testCases[0].expectedOutput.trim() : "";
+  const isArrayReturn = firstExpected.startsWith('[');
+  const isStringReturn = firstExpected.startsWith('"');
+  const isBoolReturn = firstExpected === 'true' || firstExpected === 'false';
 
   const runner = `
 #include <stdio.h>
@@ -1145,10 +1522,16 @@ int main() {
 
     ${argExtract}
     int _returnSize;
-    ${isArrayReturn ? `int* result = ${fn}(${argCall});` : `int result = ${fn}(${argCall});`}
-    ${isArrayReturn
+    ${isStringReturn
+      ? `char* result = ${fn}(${argCall}); sprintf(actual, "\\"%s\\"", result);`
+      : isBoolReturn
+        ? `bool result = ${fn}(${argCall}); sprintf(actual, "%s", result ? "true" : "false");`
+        : isArrayReturn
+          ? `int* result = ${fn}(${argCall});`
+          : `int result = ${fn}(${argCall}); sprintf(actual, "%d", result);`}
+    ${isStringReturn || isBoolReturn ? `` : isArrayReturn
       ? `sprintf(actual, "["); for (int _i = 0; _i < _returnSize; _i++) { if (_i > 0) strcat(actual, ","); char _b[16]; sprintf(_b, "%d", result[_i]); strcat(actual, _b); } strcat(actual, "]");`
-      : `sprintf(actual, "%d", result);`}
+      : ``}
 
     clock_t end = clock();
     double rt = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
@@ -1364,8 +1747,9 @@ fn main() {
 
         let (pass, actual) = match result {
             Ok(val) => {
-                let actual_str = format!("{:?}", val).replace(" ", "");
-                (actual_str == expected, actual_str)
+                let actual_str = format!("{:?}", val);
+                let normalized = actual_str.replace(" ", "");
+                (normalized == expected, actual_str)
             }
             Err(_) => (false, String::new()),
         };
