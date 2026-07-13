@@ -123,17 +123,17 @@ export class Judge0Service {
         return this.inlineTestCasesC(source, json);
       case 'go':
         return source.replace(
-          /data\s*,\s*err\s*:=\s*os\.ReadFile/,
-          'data, err := []byte(`' + json + '`), error(nil)'
+          /data\s*,\s*err\s*:=\s*os\.ReadFile\s*\([^)]*\)/,
+          'data := []byte(`' + json + '`)\nvar err error'
         );
       case 'rust':
         return source.replace(
-          /let\s+\w+\s*=\s*fs::read_to_string\s*\([^)]*\)/,
+          /let\s+\w+\s*=\s*fs::read_to_string\s*\([^;]*\)\.unwrap_or_default\(\)/,
           `let content = "${json.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}".to_string()`
         );
       case 'java':
         return source.replace(
-          /String\s+content\s*=\s*new\s+String\s*\([^)]*\)\s*;/,
+          /String\s+content\s*=\s*new\s+String\s*\([^;]*\)\s*;/,
           `String content = "${json.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}";`
         );
       default:
