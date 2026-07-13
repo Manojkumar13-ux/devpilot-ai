@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { User, AuthResponse } from "@devpilot/shared";
-import api from "../lib/api";
+import { api } from "../lib/api";
 
 interface AuthContextType {
   user: User | null;
@@ -24,7 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       const res = await api.get<User>("/auth/me");
-      setUser(res.data);
+      setUser(res);
     } catch {
       localStorage.removeItem("token");
       setUser(null);
@@ -39,14 +39,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const res = await api.post<AuthResponse>("/auth/login", { email, password });
-    localStorage.setItem("token", res.data.token);
-    setUser(res.data.user);
+    localStorage.setItem("token", res.tokens.accessToken);
+    setUser(res.user);
   };
 
   const register = async (email: string, username: string, password: string) => {
     const res = await api.post<AuthResponse>("/auth/register", { email, username, password });
-    localStorage.setItem("token", res.data.token);
-    setUser(res.data.user);
+    localStorage.setItem("token", res.tokens.accessToken);
+    setUser(res.user);
   };
 
   const logout = async () => {

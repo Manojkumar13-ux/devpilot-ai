@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import type { ProblemListItem } from "@devpilot/shared";
-import api from "../lib/api";
+import { api } from "../lib/api";
 import { Search, Filter, ChevronRight, Code2 } from "lucide-react";
 
 const DIFFICULTIES = ["All", "Easy", "Medium", "Hard"] as const;
@@ -35,7 +35,7 @@ export default function Problems() {
     if (search) params.set("search", search);
 
     api.get<ProblemListItem[]>(`/problems?${params.toString()}`)
-      .then((res) => setProblems(res.data))
+      .then((res) => setProblems(res))
       .catch(() => setError("Failed to load problems"))
       .finally(() => setLoading(false));
   }, [difficulty, category, search]);

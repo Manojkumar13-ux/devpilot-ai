@@ -36,6 +36,9 @@ async function request<T = any>(path: string, options: RequestInit = {}): Promis
 }
 
 export const api = {
+  get: <T = any>(path: string) => request<T>(`/api${path}`),
+  post: <T = any>(path: string, body?: unknown) =>
+    request<T>(`/api${path}`, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
   auth: {
     register: (data: RegisterRequest) =>
       request<AuthResponse>("/api/auth/register", { method: "POST", body: JSON.stringify(data) }),
