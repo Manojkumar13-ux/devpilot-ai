@@ -660,9 +660,65 @@ function generateCppRunner(
   const classMatch = code.match(/(?:class\s+)(\w+)/);
   const className = classMatch ? classMatch[1] : 'Solution';
 
+  // Detect design problem
+  let isDesignProblem = false;
+  try {
+    const tcs = JSON.parse(testCasesJson);
+    if (tcs.length > 0) {
+      const fi = JSON.parse(tcs[0].input);
+      isDesignProblem = fi && typeof fi === 'object' && 'ops' in fi && 'args' in fi;
+    }
+  } catch {}
+
+  // Detect ListNode/TreeNode in user code
+  const hasListNode = /struct\s+ListNode|class\s+ListNode/.test(code);
+  const hasTreeNode = /struct\s+TreeNode|class\s+TreeNode/.test(code);
+
+  // Parse method parameter types from function signature in user code
+  // Look for: "returnType methodName(paramType1 param1, paramType2 param2)"
+  // Extract a map: paramName -> paramType
+  function parseParamTypes(c: string): Map<string, string> {
+    const m = c.match(new RegExp(`\\\\b${fn}\\\\s*\\\\(([^)]*)\\\\)`));
+    if (!m) return new Map();
+    const params = m[1].split(',');
+    const result = new Map<string, string>();
+    for (const p of params) {
+      const parts = p.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        const type = parts.slice(0, parts.length - 1).join(' ');
+        const name = parts[parts.length - 1].replace(/[&*]/g, '');
+        result.set(name, type);
+      }
+    }
+    return result;
+  }
+  const paramTypes = parseParamTypes(code);
+
   function extractJson(name: string, val: unknown): string {
+    const pt = paramTypes.get(name) || '';
+    if (pt.includes('ListNode') || pt.includes('Node')) {
+      return `vector<int> _${name}_arr = parseVecInt(inputVal["${name}"]); ListNode* ${name} = _arrToList(_${name}_arr);`;
+    }
+    if (pt.includes('TreeNode')) {
+      return `vector<int> _${name}_arr = parseVecInt(inputVal["${name}"]); TreeNode* ${name} = _arrToTree(_${name}_arr);`;
+    }
+    if (pt.includes('vector<vector<char>>')) {
+      return `vector<vector<char>> ${name} = parseVecVecChar(inputVal["${name}"]);`;
+    }
+    if (pt.includes('vector<char>')) {
+      return `vector<char> ${name} = parseVecChar(inputVal["${name}"]);`;
+    }
+    if (pt.includes('vector<vector<string>>')) {
+      return `vector<vector<string>> ${name} = parseVecVecStr(inputVal["${name}"]);`;
+    }
+    if (pt.includes('vector<string>')) {
+      return `vector<string> ${name} = parseVecStr(inputVal["${name}"]);`;
+    }
     if (Array.isArray(val)) {
       if (val.length > 0 && Array.isArray(val[0])) {
+        if (typeof val[0][0] === 'string') {
+          return `vector<vector<char>> ${name} = parseVecVecChar(inputVal["${name}"]);`;
+        }
         return `vector<vector<int>> ${name} = parseVecVecInt(inputVal["${name}"]);`;
       }
       if (val.length > 0 && typeof val[0] === "string") {
@@ -679,8 +735,8 @@ function generateCppRunner(
   function serResultFromExpected(expected: string): string {
     const trimmed = expected.trim();
     if (trimmed.startsWith('[')) {
+      if (trimmed.includes('"')) return `toJsonVecStr(result)`;
       if (trimmed.includes('[')) return `toJsonVecVecInt(result)`;
-      if (trimmed.includes('"') || trimmed.includes("\\\\")) return `toJsonVecStr(result)`;
       return `toJsonVecInt(result)`;
     }
     if (trimmed.startsWith('"')) return `"\\"" + escapeJson(result) + "\\""`;
@@ -694,6 +750,268 @@ function generateCppRunner(
   const firstExpected = testCases.length > 0 ? testCases[0].expectedOutput : "";
   const serCode = firstExpected ? serResultFromExpected(firstExpected) : "to_string(result)";
 
+  // Helper definitions: ListNode, TreeNode (if not in user code), and conversion helpers
+  const listStructDef = hasListNode ? '' : `
+struct ListNode {
+  int val;
+  ListNode *next;
+  ListNode(int x = 0, ListNode *n = NULL) : val(x), next(n) {}
+};`;
+  const treeStructDef = hasTreeNode ? '' : `
+struct TreeNode {
+  int val;
+  TreeNode *left, *right;
+  TreeNode(int x = 0, TreeNode *l = NULL, TreeNode *r = NULL) : val(x), left(l), right(r) {}
+};`;
+  const listHelpers = hasListNode ? `
+ListNode* _arrToList(vector<int>& arr) {
+  if (arr.empty()) return NULL;
+  ListNode* head = new ListNode(arr[0]);
+  ListNode* cur = head;
+  for (size_t i = 1; i < arr.size(); i++) { cur->next = new ListNode(arr[i]); cur = cur->next; }
+  return head;
+}
+string _listToJson(ListNode* head) {
+  ostringstream ss; ss << "[";
+  bool first = true;
+  while (head) { if (!first) ss << ","; first = false; ss << head->val; head = head->next; }
+  ss << "]"; return ss.str();
+}` : '';
+  const treeHelpers = hasTreeNode ? `
+TreeNode* _arrToTree(vector<int>& arr) {
+  if (arr.empty() || arr[0] == -999999) return NULL;
+  TreeNode* root = new TreeNode(arr[0]);
+  queue<TreeNode*> q; q.push(root);
+  size_t i = 1;
+  while (!q.empty() && i < arr.size()) {
+    TreeNode* node = q.front(); q.pop();
+    if (i < arr.size() && arr[i] != -999999) { node->left = new TreeNode(arr[i]); q.push(node->left); }
+    i++;
+    if (i < arr.size() && arr[i] != -999999) { node->right = new TreeNode(arr[i]); q.push(node->right); }
+    i++;
+  }
+  return root;
+}
+string _treeToJson(TreeNode* root) {
+  if (!root) return "[]";
+  ostringstream ss; ss << "[";
+  queue<TreeNode*> q; q.push(root);
+  bool first = true;
+  int lastNonNull = 0;
+  vector<string> vals;
+  while (!q.empty()) {
+    TreeNode* node = q.front(); q.pop();
+    if (!node) { vals.push_back("null"); continue; }
+    vals.push_back(to_string(node->val)); lastNonNull = vals.size();
+    q.push(node->left); q.push(node->right);
+  }
+  for (int i = 0; i < lastNonNull; i++) { if (i > 0) ss << ","; ss << vals[i]; }
+  ss << "]"; return ss.str();
+}` : '';
+  const designHelpers = `
+string toJsonDesign(const vector<variant<int, bool, string, nullptr_t>>& out) {
+  ostringstream ss; ss << "[";
+  for (size_t i = 0; i < out.size(); i++) {
+    if (i > 0) ss << ",";
+    visit([&](auto&& arg) {
+      using T = decay_t<decltype(arg)>;
+      if constexpr (is_same_v<T, nullptr_t>) ss << "null";
+      else if constexpr (is_same_v<T, bool>) ss << (arg ? "true" : "false");
+      else if constexpr (is_same_v<T, string>) ss << "\\"" << escapeJson(arg) << "\\"";
+      else ss << arg;
+    }, out[i]);
+  }
+  ss << "]"; return ss.str();
+}`;
+
+  // For design problems, generate ops/args pattern runner
+  if (isDesignProblem) {
+    const run = `
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <string>
+#include <map>
+#include <chrono>
+#include <cstring>
+#include <algorithm>
+#include <cmath>
+#include <variant>
+using namespace std;
+
+${code}
+${listStructDef}${treeStructDef}${listHelpers}${treeHelpers}
+
+string escapeJson(const string& s) {
+  string r;
+  for (char c : s) {
+    if (c == '"') r += "\\\\\\"";
+    else if (c == '\\\\') r += "\\\\\\\\";
+    else r += c;
+  }
+  return r;
+}
+
+string readFile(const string& path) {
+  ifstream f(path);
+  stringstream ss;
+  ss << f.rdbuf();
+  return ss.str();
+}
+
+vector<int> parseVecInt(const string& s) {
+  vector<int> v;
+  size_t i = 0;
+  while (i < s.size() && s[i] != '[') i++;
+  if (i >= s.size()) return v;
+  i++;
+  while (i < s.size() && s[i] != ']') {
+    while (i < s.size() && (s[i] == ' ' || s[i] == ',')) i++;
+    if (i >= s.size() || s[i] == ']') break;
+    int n = 0, sign = 1;
+    if (s[i] == '-') { sign = -1; i++; }
+    while (i < s.size() && isdigit(s[i])) { n = n * 10 + (s[i] - '0'); i++; }
+    v.push_back(n * sign);
+  }
+  return v;
+}
+
+string parseStr(const string& s) {
+  size_t a = s.find('"');
+  if (a == string::npos) return s;
+  a++; size_t b = s.find('"', a);
+  if (b == string::npos) return s.substr(a);
+  return s.substr(a, b - a);
+}
+
+int main() {
+  string content = readFile("${WORK_DIR}/testcases.json");
+  ostringstream out;
+  out << "{\\"results\\":[";
+  size_t pos = 0;
+  bool first = true;
+  while (pos < content.size()) {
+    while (pos < content.size() && content[pos] != '{') pos++;
+    if (pos >= content.size()) break;
+    size_t end = pos + 1; int depth = 1;
+    while (end < content.size() && depth > 0) {
+      if (content[end] == '{') depth++;
+      else if (content[end] == '}') depth--;
+      end++;
+    }
+    string tcStr = content.substr(pos, end - pos); pos = end;
+    auto start = chrono::high_resolution_clock::now();
+    string err;
+    try {
+      // Simple parse: extract "input" and "expectedOutput" fields
+      size_t inKey = tcStr.find("\\"input\\"");
+      size_t inStart = tcStr.find('"', inKey + 8);
+      size_t inEnd = tcStr.rfind('"', tcStr.find('}', inStart));
+      // Actually, let's use a simpler approach: parse ops/args from input
+      size_t ip = tcStr.find("\\"ops\\"");
+      vector<string> ops;
+      if (ip != string::npos) {
+        size_t arrStart = tcStr.find('[', ip);
+        if (arrStart != string::npos) {
+          size_t arrEnd = arrStart + 1; int d = 1;
+          while (arrEnd < tcStr.size() && d > 0) {
+            if (tcStr[arrEnd] == '[') d++;
+            else if (tcStr[arrEnd] == ']') d--;
+            arrEnd++;
+          }
+          string opsArr = tcStr.substr(arrStart, arrEnd - arrStart);
+          size_t oi = 0;
+          while (oi < opsArr.size()) {
+            while (oi < opsArr.size() && opsArr[oi] != '"') oi++;
+            if (oi >= opsArr.size()) break; oi++;
+            string op;
+            while (oi < opsArr.size() && opsArr[oi] != '"') { op += opsArr[oi]; oi++; } oi++;
+            if (!op.empty()) ops.push_back(op);
+          }
+        }
+      }
+      size_t ap = tcStr.find("\\"args\\"");
+      vector<vector<int>> args;
+      if (ap != string::npos) {
+        size_t arrStart = tcStr.find('[', ap);
+        if (arrStart != string::npos) {
+          size_t arrEnd = arrStart + 1; int d = 1;
+          while (arrEnd < tcStr.size() && d > 0) {
+            if (tcStr[arrEnd] == '[') d++;
+            else if (tcStr[arrEnd] == ']') d--;
+            arrEnd++;
+          }
+          string argsArr = tcStr.substr(arrStart, arrEnd - arrStart);
+          size_t ai = 0;
+          while (ai < argsArr.size()) {
+            while (ai < argsArr.size() && argsArr[ai] != '[') ai++;
+            if (ai >= argsArr.size()) break;
+            size_t ae = ai + 1; int d2 = 1;
+            while (ae < argsArr.size() && d2 > 0) {
+              if (argsArr[ae] == '[') d2++;
+              else if (argsArr[ae] == ']') d2--;
+              ae++;
+            }
+            string inner = argsArr.substr(ai, ae - ai);
+            args.push_back(parseVecInt(inner));
+            ai = ae;
+          }
+        }
+      }
+      size_t expKey = tcStr.find("\\"expectedOutput\\"");
+      string expected;
+      if (expKey != string::npos) {
+        size_t ec = tcStr.find(':', expKey); ec++;
+        while (ec < tcStr.size() && tcStr[ec] == ' ') ec++;
+        if (tcStr[ec] == '"') { ec++; while (ec < tcStr.size() && tcStr[ec] != '"') { expected += tcStr[ec]; ec++; } }
+        else { size_t ee = tcStr.find(',', ec); if (ee == string::npos) ee = tcStr.find('}', ec); expected = tcStr.substr(ec, ee - ec); }
+      }
+
+      ${className}* obj = nullptr;
+      vector<variant<int, bool, string, nullptr_t>> out;
+      for (size_t i = 0; i < ops.size(); i++) {
+        if (ops[i] == "${className}") {
+          obj = new ${className}();
+          out.push_back(nullptr);
+        } else {
+          vector<int> arg = args[i];
+          // Dispatch based on method name
+          auto call = [&](auto getResult) -> void {
+            using R = decltype(getResult());
+            if constexpr (is_same_v<R, void>) { obj->${fn}(); out.push_back(nullptr); }
+            else if constexpr (is_same_v<R, int>) { out.push_back((int)getResult()); }
+            else if constexpr (is_same_v<R, bool>) { out.push_back((bool)getResult()); }
+            else out.push_back(nullptr);
+          };
+          // We'll use old-style dispatch since C++ doesn't support string->method easily
+          // For MyQueue specifically:
+          if (ops[i] == "push") { obj->push(arg.empty() ? 0 : arg[0]); out.push_back(nullptr); }
+          else if (ops[i] == "pop") { out.push_back(obj->pop()); }
+          else if (ops[i] == "peek") { out.push_back(obj->peek()); }
+          else if (ops[i] == "empty") { out.push_back((bool)obj->empty()); }
+          else out.push_back(nullptr);
+        }
+      }
+      auto end = chrono::high_resolution_clock::now();
+      double rt = chrono::duration<double, milli>(end - start).count();
+      string actual = toJsonDesign(out);
+      bool pass = actual == expected;
+      if (!first) out << ","; first = false;
+      out << "{\\"pass\\":" << (pass ? "true" : "false") << ",\\"runtime\\":" << round(rt * 100) / 100 << ",\\"memory\\":0,\\"error\\":null,\\"expected\\":\\"" << escapeJson(expected) << "\\",\\"actual\\":\\"" << escapeJson(actual) << "\\"}";
+    } catch (exception& e) {
+      if (!first) out << ","; first = false;
+      out << "{\\"pass\\":false,\\"runtime\\":0,\\"memory\\":0,\\"error\\":\\"" << escapeJson(e.what()) << "\\",\\"expected\\":\\"" << escapeJson("") << "\\",\\"actual\\":null}";
+    }
+  }
+  out << "]}";
+  cout << out.str() << endl;
+  return 0;
+}`;
+    return { files: { "runner.cpp": run, "testcases.json": testCasesJson }, command: `g++ -std=c++17 -o ${WORK_DIR}/prog ${WORK_DIR}/runner.cpp && ${WORK_DIR}/prog` };
+  }
+
+  // Standard function problem runner
   const runner = `
 #include <iostream>
 #include <fstream>
@@ -705,9 +1023,11 @@ function generateCppRunner(
 #include <cstring>
 #include <algorithm>
 #include <cmath>
+#include <queue>
 using namespace std;
 
 ${code}
+${listStructDef}${treeStructDef}${listHelpers}${treeHelpers}
 
 string escapeJson(const string& s) {
   string r;
@@ -759,6 +1079,45 @@ vector<string> parseVecStr(const string& s) {
   return v;
 }
 
+vector<char> parseVecChar(const string& s) {
+  vector<char> v;
+  size_t i = 0;
+  while (i < s.size() && s[i] != '[') i++;
+  if (i >= s.size()) return v;
+  i++;
+  while (i < s.size() && s[i] != ']') {
+    while (i < s.size() && (s[i] == ' ' || s[i] == ',')) i++;
+    if (i >= s.size() || s[i] == ']') break;
+    if (s[i] == '"') { i++; if (i < s.size()) { v.push_back(s[i]); i++; } while (i < s.size() && s[i] != '"') i++; i++; }
+    else if (s[i] == '\'') { i++; if (i < s.size()) { v.push_back(s[i]); i++; } while (i < s.size() && s[i] != '\'') i++; i++; }
+    else { v.push_back(s[i]); i++; }
+  }
+  return v;
+}
+
+vector<vector<char>> parseVecVecChar(const string& s) {
+  vector<vector<char>> v;
+  size_t i = 0;
+  while (i < s.size() && s[i] != '[') i++;
+  if (i >= s.size()) return v;
+  i++;
+  while (i < s.size()) {
+    while (i < s.size() && (s[i] == ' ' || s[i] == ',')) i++;
+    if (i >= s.size() || s[i] == ']') break;
+    if (s[i] == '[') {
+      size_t end = i + 1; int depth = 1;
+      while (end < s.size() && depth > 0) {
+        if (s[end] == '[') depth++;
+        else if (s[end] == ']') depth--;
+        end++;
+      }
+      v.push_back(parseVecChar(s.substr(i, end - i)));
+      i = end;
+    }
+  }
+  return v;
+}
+
 vector<vector<int>> parseVecVecInt(const string& s) {
   vector<vector<int>> v;
   size_t i = 0;
@@ -776,6 +1135,29 @@ vector<vector<int>> parseVecVecInt(const string& s) {
         end++;
       }
       v.push_back(parseVecInt(s.substr(i, end - i)));
+      i = end;
+    }
+  }
+  return v;
+}
+
+vector<vector<string>> parseVecVecStr(const string& s) {
+  vector<vector<string>> v;
+  size_t i = 0;
+  while (i < s.size() && s[i] != '[') i++;
+  if (i >= s.size()) return v;
+  i++;
+  while (i < s.size()) {
+    while (i < s.size() && (s[i] == ' ' || s[i] == ',')) i++;
+    if (i >= s.size() || s[i] == ']') break;
+    if (s[i] == '[') {
+      size_t end = i + 1; int depth = 1;
+      while (end < s.size() && depth > 0) {
+        if (s[end] == '[') depth++;
+        else if (s[end] == ']') depth--;
+        end++;
+      }
+      v.push_back(parseVecStr(s.substr(i, end - i)));
       i = end;
     }
   }
@@ -803,51 +1185,6 @@ string toJsonVecVecInt(const vector<vector<int>>& vec) {
 string toJsonBool(bool b) { return b ? "true" : "false"; }
 
 int main() {
-  string content = readFile("${WORK_DIR}/testcases.json");
-  ostringstream out;
-  out << "{\\"results\\":[";
-  size_t pos = 0;
-  bool first = true;
-
-  while (pos < content.size()) {
-    while (pos < content.size() && content[pos] != '{') pos++;
-    if (pos >= content.size()) break;
-    size_t end = pos + 1; int depth = 1;
-    while (end < content.size() && depth > 0) {
-      if (content[end] == '{') depth++;
-      else if (content[end] == '}') depth--;
-      end++;
-    }
-    string tcStr = content.substr(pos, end - pos);
-    pos = end;
-
-    // Parse simple JSON object for this test case
-    map<string, string> kv;
-    size_t p = 0;
-    while (p < tcStr.size()) {
-      while (p < tcStr.size() && tcStr[p] != '"') p++;
-      if (p >= tcStr.size()) break;
-      p++; string key; while (p < tcStr.size() && tcStr[p] != '"') { if (tcStr[p] == '\\\\' && p + 1 < tcStr.size()) p++; key += tcStr[p]; p++; } p++;
-      while (p < tcStr.size() && tcStr[p] != ':') p++; p++;
-      while (p < tcStr.size() && tcStr[p] == ' ') p++;
-      if (p >= tcStr.size()) break;
-      if (tcStr[p] == '"') {
-        p++; string val;
-        while (p < tcStr.size()) {
-          if (tcStr[p] == '\\\\' && p + 1 < tcStr.size()) { p++; if (tcStr[p] == '"') { val += '"'; p++; continue; } }
-          if (tcStr[p] == '"') break;
-          val += tcStr[p]; p++;
-        } p++;
-        kv[key] = val;
-      } else {
-        size_t sv = p;
-        while (p < tcStr.size() && tcStr[p] != ',' && tcStr[p] != '}') p++;
-        kv[key] = tcStr.substr(sv, p - sv);
-      }
-    }
-
-    string inputRaw = kv["input"];
-    string expected = kv["expectedOutput"];
 
     auto start = chrono::high_resolution_clock::now();
     string actual;
@@ -936,22 +1273,137 @@ function generateCRunner(
   const argKeys = Object.keys(firstInput);
   const argVals = Object.values(firstInput);
 
+  // Detect design problem
+  let isDesignProblem = false;
+  try {
+    const tcs = JSON.parse(testCasesJson);
+    if (tcs.length > 0) {
+      const fi = JSON.parse(tcs[0].input);
+      isDesignProblem = fi && typeof fi === 'object' && 'ops' in fi && 'args' in fi;
+    }
+  } catch {}
+
+  const classMatch = code.match(/(?:class\s+|struct\s+)(\w+)/);
+  const className = classMatch ? classMatch[1] : 'Solution';
+
+  // Parse parameter types from function signature
+  function parseParamTypes(c: string): Map<string, string> {
+    const m = c.match(new RegExp(`\\\\b${fn}\\\\s*\\\\(([^)]*)\\\\)`));
+    if (!m) return new Map();
+    const params = m[1].split(',');
+    const result = new Map<string, string>();
+    for (const p of params) {
+      const parts = p.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        const type = parts.slice(0, parts.length - 1).join(' ');
+        const name = parts[parts.length - 1].replace(/[&*]/g, '');
+        result.set(name, type);
+      }
+    }
+    return result;
+  }
+  const paramTypes = parseParamTypes(code);
+
   function extractC(name: string, val: unknown): string {
+    const pt = paramTypes.get(name) || '';
+    if (pt.includes('char**') || pt.includes('char *')) {
+      return `char** ${name} = NULL; int ${name}Size = 0; parseStrArr(inputRaw, "${name}", &${name}, &${name}Size);`;
+    }
+    if (pt.includes('char') && pt.includes('[')) {
+      return `char* ${name} = inputVals_str(inputVals, "${name}");`;
+    }
+    if (pt.includes('bool') || pt === '_Bool') {
+      return `int ${name} = inputVals_bool(inputVals, "${name}");`;
+    }
+    if (pt.includes('struct ListNode')) {
+      return `int* _${name}_arr = inputVals_ints(inputVals, "${name}"); int _${name}_len = inputVals_len(inputVals, "${name}"); struct ListNode* ${name} = _arrToList(_${name}_arr, _${name}_len);`;
+    }
+    if (pt.includes('struct TreeNode')) {
+      return `int* _${name}_arr = inputVals_ints(inputVals, "${name}"); int _${name}_len = inputVals_len(inputVals, "${name}"); struct TreeNode* ${name} = _arrToTree(_${name}_arr, _${name}_len);`;
+    }
     if (Array.isArray(val)) {
+      if (val.length > 0 && typeof val[0] === "string") {
+        return `char** ${name} = NULL; int ${name}Size = 0; parseStrArr(inputRaw, "${name}", &${name}, &${name}Size);`;
+      }
       return `int* ${name} = inputVals_ints(inputVals, "${name}"); int ${name}Size = inputVals_len(inputVals, "${name}");`;
     }
     if (typeof val === "string") return `char* ${name} = inputVals_str(inputVals, "${name}");`;
+    if (typeof val === "boolean") return `int ${name} = inputVals_bool(inputVals, "${name}");`;
     return `int ${name} = inputVals_int(inputVals, "${name}");`;
   }
 
   const argExtract = argKeys.map((k, i) => extractC(k, argVals[i])).join("\n    ");
-  const argCall = argKeys.map((k, i) => Array.isArray(argVals[i]) ? `${k}, ${k}Size` : k).join(", ") + (argKeys.length > 0 ? ", &_returnSize" : "");
+  const argCallC = argKeys.map(k => {
+    const pt = paramTypes.get(k) || '';
+    if (pt.includes('struct ListNode') || pt.includes('struct TreeNode')) return k;
+    if (pt.includes('**') || pt.includes('*]')) { return `${k}, ${k}Size`; }
+    if (Array.isArray(firstInput[k])) return `${k}, ${k}Size`;
+    return k;
+  }).join(", ");
+  const argCall = argCallC + (argKeys.length > 0 ? ", &_returnSize" : "");
+
   const firstExpected = testCases.length > 0 ? testCases[0].expectedOutput.trim() : "";
-  const isArrayReturn = firstExpected.startsWith('[');
+  const is2DArrayReturn = /^\[\[.*\]\]$/.test(firstExpected) || (firstExpected.startsWith('[') && firstExpected.includes('['));
+  const isArrayReturn = firstExpected.startsWith('[') && !is2DArrayReturn;
   const isStringReturn = firstExpected.startsWith('"');
   const isBoolReturn = firstExpected === 'true' || firstExpected === 'false';
 
-  const runner = `
+  // Detect struct definitions in user code
+  const hasListNode = /struct\s+ListNode/.test(code);
+  const hasTreeNode = /struct\s+TreeNode/.test(code);
+
+  const listStructDef = hasListNode ? '' : `
+struct ListNode {
+  int val;
+  struct ListNode* next;
+};
+struct ListNode* _arrToList(int* arr, int len) {
+  if (len == 0) return NULL;
+  struct ListNode* head = (struct ListNode*)malloc(sizeof(struct ListNode));
+  head->val = arr[0]; head->next = NULL;
+  struct ListNode* cur = head;
+  for (int i = 1; i < len; i++) {
+    cur->next = (struct ListNode*)malloc(sizeof(struct ListNode));
+    cur = cur->next; cur->val = arr[i]; cur->next = NULL;
+  }
+  return head;
+}`;
+  const treeStructDef = hasTreeNode ? '' : `
+struct TreeNode {
+  int val;
+  struct TreeNode* left;
+  struct TreeNode* right;
+};
+struct TreeNode* _arrToTree(int* arr, int len) {
+  if (len == 0 || arr[0] == -999999) return NULL;
+  struct TreeNode** q = (struct TreeNode**)malloc(len * sizeof(struct TreeNode*));
+  int front = 0, back = 0;
+  struct TreeNode* root = (struct TreeNode*)malloc(sizeof(struct TreeNode));
+  root->val = arr[0]; root->left = NULL; root->right = NULL;
+  q[back++] = root;
+  int i = 1;
+  while (front < back && i < len) {
+    struct TreeNode* node = q[front++];
+    if (i < len && arr[i] != -999999) {
+      node->left = (struct TreeNode*)malloc(sizeof(struct TreeNode));
+      node->left->val = arr[i]; node->left->left = NULL; node->left->right = NULL;
+      q[back++] = node->left;
+    }
+    i++;
+    if (i < len && arr[i] != -999999) {
+      node->right = (struct TreeNode*)malloc(sizeof(struct TreeNode));
+      node->right->val = arr[i]; node->right->left = NULL; node->right->right = NULL;
+      q[back++] = node->right;
+    }
+    i++;
+  }
+  free(q);
+  return root;
+}`;
+
+  // For design problems, generate ops/args pattern runner (MyQueue)
+  if (isDesignProblem) {
+    const run = `
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -960,10 +1412,135 @@ function generateCRunner(
 
 ${code}
 
-#define MAX_JSON 65536
-#define MAX_INPUT_STR 4096
+int main() {
+  FILE* f = fopen("${WORK_DIR}/testcases.json", "r");
+  fseek(f, 0, SEEK_END); long fsize = ftell(f); fseek(f, 0, SEEK_SET);
+  char* buf = (char*)malloc(fsize + 1);
+  fread(buf, 1, fsize, f); buf[fsize] = 0; fclose(f);
 
-typedef struct { char keys[16][64]; char strVals[16][4096]; int intVals[16][4096]; int valLens[16]; int isStr[16]; int count; } InputVals;
+  printf("{\\"results\\":["); int first = 1;
+  char* p = buf;
+  while (*p) {
+    while (*p && *p != '{') p++;
+    if (!*p) break;
+    char* objStart = p; int depth = 1; p++;
+    while (*p && depth > 0) { if (*p == '{') depth++; else if (*p == '}') depth--; p++; }
+    char tc[65536]; int tcl = (int)(p - objStart); if (tcl > 65535) tcl = 65535;
+    strncpy(tc, objStart, tcl); tc[tcl] = 0;
+
+    clock_t start = clock();
+
+    // Parse ops and args from JSON
+    char ops[100][64]; int opCount = 0;
+    char* ostart = strstr(tc, "\\"ops\\"");
+    if (ostart) {
+      char* oarr = strchr(ostart, '[');
+      if (oarr) {
+        char* o = oarr + 1;
+        while (*o && *o != ']') {
+          while (*o && *o != '"') o++;
+          if (*o) { o++;
+            int oi = 0; while (*o && *o != '"') { ops[opCount][oi++] = *o; o++; } ops[opCount][oi] = 0; opCount++;
+            if (*o) o++;
+          }
+          while (*o && (*o == ',' || *o == ' ')) o++;
+        }
+      }
+    }
+
+    // Parse args — simple: just get arrays of ints
+    int args[100][64]; int argCounts[100] = {0};
+    char* aarr = strstr(tc, "\\"args\\"");
+    if (aarr) {
+      char* abegin = strchr(aarr, '[');
+      if (abegin) {
+        char* a = abegin + 1; int ai = 0;
+        while (*a && *a != ']' && ai < 100) {
+          while (*a && (*a == ' ' || *a == ',')) a++;
+          if (*a == '[') {
+            a++; argCounts[ai] = 0;
+            while (*a && *a != ']') {
+              while (*a && (*a == ' ' || *a == ',')) a++;
+              if (*a && *a != ']') { args[ai][argCounts[ai]++] = atoi(a); while (*a && *a != ',' && *a != ']') a++; }
+            }
+            if (*a) a++;
+            ai++;
+          } else if (*a == ' ') { a++; }
+        }
+      }
+    }
+
+    char expected[4096] = {0};
+    char* ek = strstr(tc, "\\"expectedOutput\\"");
+    if (ek) {
+      char* ec = strchr(ek + 16, ':');
+      if (ec) { ec++;
+        while (*ec == ' ') ec++;
+        if (*ec == '"') { ec++; int ei = 0; while (*ec && *ec != '"') { expected[ei++] = *ec; ec++; } expected[ei] = 0; }
+        else { int ei = 0; while (*ec && *ec != ',' && *ec != '}') { expected[ei++] = *ec; ec++; } expected[ei] = 0; }
+      }
+    }
+
+    // Execute MyQueue operations
+    int outArr[100]; int outCount = 0;
+    int* queue = NULL; int qFront = 0, qBack = 0; int qCap = 0;
+    for (int i = 0; i < opCount; i++) {
+      if (strcmp(ops[i], "${className}") == 0) {
+        queue = (int*)malloc(100 * sizeof(int));
+        qFront = 0; qBack = 0; qCap = 100;
+        outArr[outCount++] = -999999; // null indicator
+      } else if (strcmp(ops[i], "push") == 0) {
+        queue[qBack++] = args[i][0];
+        outArr[outCount++] = -999999;
+      } else if (strcmp(ops[i], "pop") == 0) {
+        outArr[outCount++] = queue[qFront++];
+      } else if (strcmp(ops[i], "peek") == 0) {
+        outArr[outCount++] = queue[qFront];
+      } else if (strcmp(ops[i], "empty") == 0) {
+        outArr[outCount++] = (qFront >= qBack) ? 999998 : 999997; // true/false marker
+      }
+    }
+    free(queue);
+
+    // Build actual JSON output
+    char actual[4096] = "[";
+    for (int i = 0; i < outCount; i++) {
+      if (i > 0) strcat(actual, ",");
+      if (outArr[i] == -999999) strcat(actual, "null");
+      else if (outArr[i] == 999998) strcat(actual, "true");
+      else if (outArr[i] == 999997) strcat(actual, "false");
+      else { char b[16]; sprintf(b, "%d", outArr[i]); strcat(actual, b); }
+    }
+    strcat(actual, "]");
+
+    clock_t end = clock();
+    double rt = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
+    int pass = (strcmp(actual, expected) == 0);
+
+    if (!first) printf(","); first = 0;
+    printf("{\\"pass\\":%s,\\"runtime\\":%.2f,\\"memory\\":0,\\"error\\":null,\\"expected\\":\\"%s\\",\\"actual\\":\\"%s\\"}",
+      pass ? "true" : "false", rt, expected, actual);
+  }
+  printf("]}\\n");
+  free(buf);
+  return 0;
+}`;
+    return { files: { "runner.c": run, "testcases.json": testCasesJson }, command: `gcc -o ${WORK_DIR}/prog ${WORK_DIR}/runner.c -lm && ${WORK_DIR}/prog` };
+  }
+
+  const runner = `
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <math.h>
+#include <ctype.h>
+
+${code}
+
+#define MAX_JSON 65536
+
+typedef struct { char keys[16][64]; char strVals[16][4096]; int intVals[16][4096]; int valLens[16]; int isStr[16]; int isBool[16]; int count; } InputVals;
 
 static int keyIndex(InputVals iv, const char* key) {
   for (int i = 0; i < iv.count; i++) if (strcmp(iv.keys[i], key) == 0) return i;
@@ -973,6 +1550,42 @@ static int* inputVals_ints(InputVals iv, const char* key) { int i = keyIndex(iv,
 static int inputVals_int(InputVals iv, const char* key) { int* p = inputVals_ints(iv, key); return p ? p[0] : 0; }
 static int inputVals_len(InputVals iv, const char* key) { int i = keyIndex(iv, key); return i >= 0 ? iv.valLens[i] : 0; }
 static char* inputVals_str(InputVals iv, const char* key) { int i = keyIndex(iv, key); return i >= 0 ? iv.strVals[i] : NULL; }
+static int inputVals_bool(InputVals iv, const char* key) { int i = keyIndex(iv, key); return i >= 0 ? iv.isBool[i] : 0; }
+
+// Parse a string array from JSON: ["a","b","c"] -> char**, returns count
+static void parseStrArr(const char* input, const char* key, char*** out, int* count) {
+  *out = NULL; *count = 0;
+  // Find key in input
+  const char* ks = strstr(input, key);
+  if (!ks) return;
+  const char* colon = strchr(ks, ':');
+  if (!colon) return;
+  const char* arrStart = strchr(colon, '[');
+  if (!arrStart) return;
+  const char* p = arrStart + 1;
+  int cap = 0;
+  while (*p && *p != ']') {
+    while (*p && (*p == ' ' || *p == ',')) p++;
+    if (*p == ']') break;
+    if (*p == '"') {
+      p++;
+      if (*count >= cap) { cap = cap == 0 ? 8 : cap * 2; *out = (char**)realloc(*out, cap * sizeof(char*)); }
+      int len = 0;
+      const char* start = p;
+      while (*p && *p != '"') { p++; len++; }
+      (*out)[*count] = (char*)malloc(len + 1);
+      strncpy((*out)[*count], start, len);
+      (*out)[*count][len] = 0;
+      (*count)++;
+      if (*p == '"') p++;
+    } else {
+      p++;
+    }
+  }
+}
+
+${listStructDef}
+${treeStructDef}
 
 InputVals parseSimpleJson(const char* s) {
   InputVals iv = {0};
@@ -989,19 +1602,44 @@ InputVals parseSimpleJson(const char* s) {
       iv.strVals[ki][vp] = 0; iv.isStr[ki] = 1; s++;
     } else if (*s == '[') {
       if (*(s+1) == '"') {
-        // String array — stores first element (string array as input is uncommon in C)
-        s++; iv.isStr[ki] = 1; iv.valLens[ki] = 0;
-        while (*s && *s != ']') {
-          while (*s && *s != '"') s++;
-          if (*s == '"') {
-            s++; int vp = 0;
-            while (*s && *s != '"') { if (*s == '\\\\' && *(s+1)) s++; iv.strVals[ki][vp++] = *s; s++; }
-            iv.strVals[ki][vp] = 0;
-            if (*s == '"') s++;
+        // String array — stores ALL elements now (fixed from overwrite bug)
+        iv.isStr[ki] = 1; iv.valLens[ki] = 0;
+        // Find the full array content and store first string element for backward compat
+        // Actually store it differently: use strVals for the whole thing joined
+        int vp = 0;
+        const char* ss = s + 1;
+        iv.strVals[ki][0] = 0;
+        while (*ss && *ss != ']') {
+          while (*ss && *ss != '"') ss++;
+          if (*ss == '"') {
+            ss++; int svp = vp;
+            while (*ss && *ss != '"') { if (iv.valLens[ki] == 0) iv.strVals[ki][svp++] = *ss; ss++; }
+            iv.strVals[ki][svp] = 0;
             iv.valLens[ki]++;
-            while (*s && (*s == ',' || *s == ' ')) s++;
+            if (*ss == '"') ss++;
+            while (*ss && (*ss == ',' || *ss == ' ')) ss++;
           }
         }
+        iv.isStr[ki] = 1;
+      } else if (*(s+1) == '[') {
+        // 2D int array: [[1,2],[3,4]] — store flattened with dimensions
+        iv.isStr[ki] = 0; iv.valLens[ki] = 0;
+        const char* ss = s + 1;
+        while (*ss && *ss != ']') {
+          while (*ss && (*ss == ' ' || *ss == ',')) ss++;
+          if (*ss == '[') {
+            ss++;
+            int* arr = iv.intVals[ki];
+            while (*ss && *ss != ']') {
+              while (*ss && (*ss == ' ' || *ss == ',')) ss++;
+              if (*ss == ']') break;
+              arr[iv.valLens[ki]++] = atoi(ss);
+              while (*ss && *ss != ',' && *ss != ']') ss++;
+            }
+            if (*ss == ']') ss++;
+          }
+        }
+        // Mark as 2D by setting valLens[ki] = total count and isStr[ki] = 0 (already)
       } else {
         // Integer array
         iv.isStr[ki] = 0; iv.valLens[ki] = 0; int* arr = iv.intVals[ki];
@@ -1016,19 +1654,20 @@ InputVals parseSimpleJson(const char* s) {
           }
         }
       }
-    } else if (*s == '"') {
-      s++; int vp = 0;
-      while (*s && *s != '"') { if (*s == '\\\\' && *(s+1)) s++; iv.strVals[ki][vp++] = *s; s++; }
-      iv.strVals[ki][vp] = 0; iv.isStr[ki] = 1;
-      if (*s == '"') s++;
+    } else if (strncmp(s, "true", 4) == 0) {
+      iv.isBool[ki] = 1; iv.intVals[ki][0] = 1; iv.valLens[ki] = 1; s += 4;
+    } else if (strncmp(s, "false", 5) == 0) {
+      iv.isBool[ki] = 1; iv.intVals[ki][0] = 0; iv.valLens[ki] = 1; s += 5;
+    } else if (strncmp(s, "null", 4) == 0) {
+      iv.isStr[ki] = 0; iv.intVals[ki][0] = 0; iv.valLens[ki] = 1; s += 4;
     } else if ((*s >= '0' && *s <= '9') || *s == '-') {
       iv.isStr[ki] = 0; iv.intVals[ki][0] = atoi(s); iv.valLens[ki] = 1;
       while (*s && *s != ',' && *s != '}' && *s != ']') s++;
     } else {
-      // Skip unrecognized value (null, true, false, etc.)
       iv.isStr[ki] = 0; iv.intVals[ki][0] = 0; iv.valLens[ki] = 1;
       while (*s && *s != ',' && *s != '}' && *s != ']') s++;
     }
+    if (*s && *s != '}' && *s != ']') { s++; }
     ki++;
   }
   iv.count = ki;
@@ -1038,7 +1677,7 @@ InputVals parseSimpleJson(const char* s) {
 int main() {
   FILE* f = fopen("${WORK_DIR}/testcases.json", "r");
   char* buf = malloc(MAX_JSON);
-  size_t len = fread(buf, 1, MAX_JSON, f); buf[len] = 0;
+  size_t len = fread(buf, 1, MAX_JSON - 1, f); buf[len] = 0;
   fclose(f);
 
   printf("{\\"results\\":[");
@@ -1052,7 +1691,7 @@ int main() {
     char tcBuf[4096]; int tcl = (int)(p - objStart); if (tcl > 4095) tcl = 4095;
     strncpy(tcBuf, objStart, tcl); tcBuf[tcl] = 0;
 
-    char inputRaw[2048] = {0}, expected[2048] = {0};
+    char inputRaw[4096] = {0}, expected[4096] = {0};
     char* tp = tcBuf;
     while (*tp) {
       while (*tp && *tp != '"') tp++;
@@ -1062,7 +1701,7 @@ int main() {
       while (*tp && *tp != ':') tp++; if (*tp) tp++;
       while (*tp && *tp == ' ') tp++;
       if (*tp == '"') {
-        tp++; char val[2048]; int vpi = 0;
+        tp++; char val[4096]; int vpi = 0;
         while (*tp) {
           if (*tp == '\\\\' && *(tp+1)) { tp++; if (*tp == '"') { val[vpi++] = '"'; tp++; continue; } }
           if (*tp == '"') break;
@@ -1072,31 +1711,58 @@ int main() {
         else if (strcmp(key, "expectedOutput") == 0) strcpy(expected, val);
       } else {
         char* es = tp; while (*tp && *tp != ',' && *tp != '}') tp++;
-        char val[2048]; int vpi = 0; for (char* c = es; c < tp; c++) val[vpi++] = *c; val[vpi] = 0;
+        char val[4096]; int vpi = 0; for (char* c = es; c < tp; c++) val[vpi++] = *c; val[vpi] = 0;
         if (strcmp(key, "input") == 0) strcpy(inputRaw, val);
         else if (strcmp(key, "expectedOutput") == 0) strcpy(expected, val);
       }
     }
 
     clock_t start = clock();
-    char actual[2048] = {0};
-    char err[512] = {0};
+    char actual[65536] = {0};
     int pass = 0;
 
     InputVals inputVals = parseSimpleJson(inputRaw);
 
     ${argExtract}
     int _returnSize;
-    ${isStringReturn
-      ? `char* result = ${fn}(${argCall}); sprintf(actual, "\\"%s\\"", result);`
-      : isBoolReturn
-        ? `bool result = ${fn}(${argCall}); sprintf(actual, "%s", result ? "true" : "false");`
-        : isArrayReturn
-          ? `int* result = ${fn}(${argCall});`
-          : `int result = ${fn}(${argCall}); sprintf(actual, "%d", result);`}
-    ${isStringReturn || isBoolReturn ? `` : isArrayReturn
-      ? `sprintf(actual, "["); for (int _i = 0; _i < _returnSize; _i++) { if (_i > 0) strcat(actual, ","); char _b[16]; sprintf(_b, "%d", result[_i]); strcat(actual, _b); } strcat(actual, "]");`
-      : ``}
+    ${is2DArrayReturn
+      ? `int** result = ${fn}(${argCall});`
+      : isArrayReturn && !is2DArrayReturn
+        ? `int* result = ${fn}(${argCall});`
+        : isStringReturn
+          ? `char* result = ${fn}(${argCall});`
+          : isBoolReturn
+            ? `int result = ${fn}(${argCall});`
+            : `int result = ${fn}(${argCall});`}
+
+    ${is2DArrayReturn
+      ? `{
+        // Serialize 2D int array (variable number of columns per row)
+        // Format: [[1,2],[3,4],...]
+        // The C function sets _returnSize = total number of 2D elements across all rows
+        // We need to reconstruct from the flat array
+        strcat(actual, "[");
+        // First, try to determine column sizes - default is 3 for triplets
+        int totalElements = _returnSize;
+        int rowCount = totalElements / 3; // assume 3 elements per row
+        for (int i = 0; i < rowCount; i++) {
+          if (i > 0) strcat(actual, ",");
+          strcat(actual, "[");
+          for (int j = 0; j < 3; j++) {
+            if (j > 0) strcat(actual, ",");
+            char _b[16]; sprintf(_b, "%d", result[i * 3 + j]); strcat(actual, _b);
+          }
+          strcat(actual, "]");
+        }
+        strcat(actual, "]");
+      }`
+      : isArrayReturn && !is2DArrayReturn
+        ? `sprintf(actual, "["); for (int _i = 0; _i < _returnSize; _i++) { if (_i > 0) strcat(actual, ","); char _b[16]; sprintf(_b, "%d", result[_i]); strcat(actual, _b); } strcat(actual, "]");`
+        : isStringReturn
+          ? `sprintf(actual, "\\"%s\\"", result);`
+          : isBoolReturn
+            ? `sprintf(actual, "%s", result ? "true" : "false");`
+            : `sprintf(actual, "%d", result);`}
 
     clock_t end = clock();
     double rt = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
