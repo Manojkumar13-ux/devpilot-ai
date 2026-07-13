@@ -32,4 +32,4 @@ COPY --from=builder /app/apps/backend/node_modules ./apps/backend/node_modules
 COPY --from=builder /app/packages ./packages
 USER devpilot
 EXPOSE 4000
-CMD ["sh", "-c", "npx prisma db push && node dist/index.js"]
+CMD ["sh", "-c", "node_modules/.bin/prisma db push && node dist/index.js"]
