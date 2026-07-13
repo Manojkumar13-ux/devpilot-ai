@@ -49,7 +49,7 @@ export class SandboxService {
         files: Record<string, string>,
         command: string,
         timeout = 30000
-    ): Promise<{ output: string; error?: string; errorType?: string; results?: any[] }> {
+    ): Promise<{ output: string; error?: string; errorType?: string; memory?: number; compileWarnings?: string; results?: any[] }> {
         await this.ensureSandboxImage();
 
         // Write runner files into the container using base64-inline Node.js commands.
@@ -147,7 +147,7 @@ export class SandboxService {
         language: string,
         code: string,
         inputOrTestCases: string | any[] = []
-    ): Promise<{ output: string; error?: string; errorType?: string; results?: any[] }> {
+    ): Promise<{ output: string; error?: string; errorType?: string; memory?: number; compileWarnings?: string; results?: any[] }> {
         await this.ensureSandboxImage();
 
         let testCases: any[] = [];
