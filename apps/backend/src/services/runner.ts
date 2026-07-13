@@ -14,7 +14,7 @@ function extractFunctionName(code: string, language: string): string | null {
       return pyDefs.length > 0 ? pyDefs[pyDefs.length - 1][1] : null;
     }
     case "java": {
-      const skip = new Set(['main', 'toString', 'hashCode', 'equals', 'Solution']);
+      const skip = new Set(['main', 'toString', 'hashCode', 'equals', 'Solution', 'ListNode', 'TreeNode', 'Node']);
       const methods = [...code.matchAll(/(?:public\s+\S+\s+)?(\w+)\s*\([^)]*\)\s*(?:\{|throws)/g)];
       const candidates = methods.filter(m => !skip.has(m[1]));
       if (candidates.length > 0) return candidates[candidates.length - 1][1];
@@ -213,6 +213,44 @@ function generateJavaRunner(
 ): { files: Record<string, string>; command: string } {
   const classMatch = code.match(/(?:public\s+)?class\s+(\w+)/);
   const className = classMatch ? classMatch[1] : 'Solution';
+
+  // Inject ListNode/TreeNode/Node class definitions if referenced but not defined in user code
+  const hasListNode = /\bclass\s+ListNode\b/.test(code);
+  const hasTreeNode = /\bclass\s+TreeNode\b/.test(code);
+  const hasNodeCls = /\bclass\s+Node\b/.test(code) && !hasListNode;
+  const refListNode = !hasListNode && /\bListNode\b/.test(code);
+  const refTreeNode = !hasTreeNode && /\bTreeNode\b/.test(code);
+  const refNode = !hasNodeCls && !hasListNode && /\bNode\b/.test(code);
+  let injectedClasses = '';
+  if (refListNode) injectedClasses += `
+class ListNode {
+  int val;
+  ListNode next;
+  ListNode() {}
+  ListNode(int val) { this.val = val; }
+  ListNode(int val, ListNode next) { this.val = val; this.next = next; }
+}
+`;
+  if (refTreeNode) injectedClasses += `
+class TreeNode {
+  int val;
+  TreeNode left;
+  TreeNode right;
+  TreeNode() {}
+  TreeNode(int val) { this.val = val; }
+  TreeNode(int val, TreeNode left, TreeNode right) { this.val = val; this.left = left; this.right = right; }
+}
+`;
+  if (refNode) injectedClasses += `
+class Node {
+  public int val;
+  public List<Node> neighbors;
+  public Node() { val = 0; neighbors = new ArrayList<Node>(); }
+  public Node(int _val) { val = _val; neighbors = new ArrayList<Node>(); }
+  public Node(int _val, ArrayList<Node> _neighbors) { val = _val; neighbors = _neighbors; }
+}
+`;
+  if (injectedClasses) code = injectedClasses + code;
 
   let isDesignProblem = false;
   try {
