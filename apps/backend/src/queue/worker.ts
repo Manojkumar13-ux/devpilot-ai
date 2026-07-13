@@ -3,11 +3,11 @@ import { Worker, Job } from 'bullmq';
 import { redisConnection, redisHealthConfig } from './redis.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import { Judge0Service } from '../services/judge0.service.js';
+import { PistonService } from '../services/piston.service.js';
 import { generateSubmitRunner } from '../services/runner.js';
 import { generateAiReview, AiReviewError } from '../services/ai-review.service.js';
 
-const executionService = new Judge0Service();
+const executionService = new PistonService();
 
 async function checkRedis(): Promise<boolean> {
   const client = new IORedis(redisHealthConfig);
