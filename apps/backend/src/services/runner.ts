@@ -504,12 +504,21 @@ function generateJavaRunner(
     if (c == 't') { i += 4; return new ParseResult(true, i); }
     if (c == 'f') { i += 5; return new ParseResult(false, i); }
     StringBuilder num = new StringBuilder();
-    while (i < s.length() && (Character.isDigit(s.charAt(i)) || s.charAt(i) == '-' || s.charAt(i) == '.')) {
-      num.append(s.charAt(i)); i++;
+    if (c == '-' || c == '+' || Character.isDigit(c)) {
+      if (c == '-' || c == '+') { num.append(c); i++; }
+      while (i < s.length() && Character.isDigit(s.charAt(i))) { num.append(s.charAt(i)); i++; }
+      if (i < s.length() && s.charAt(i) == '.') {
+        num.append('.'); i++;
+        while (i < s.length() && Character.isDigit(s.charAt(i))) { num.append(s.charAt(i)); i++; }
+        String ns = num.toString();
+        if (ns.equals("-.") || ns.equals("+.") || ns.equals(".")) return new ParseResult(0, i);
+        return new ParseResult(Double.parseDouble(ns), i);
+      }
+      String ns = num.toString();
+      if (ns.equals("-") || ns.equals("+") || ns.isEmpty()) return new ParseResult(0, i);
+      try { return new ParseResult(Integer.parseInt(ns), i); } catch (NumberFormatException e) { return new ParseResult(0, i); }
     }
-    String ns = num.toString();
-    if (ns.contains(".")) return new ParseResult(Double.parseDouble(ns), i);
-    else return new ParseResult(Integer.parseInt(ns), i);
+    return new ParseResult(null, i);
   }
 
   static int findMatching(String s, int i) {
@@ -773,16 +782,8 @@ function generateCppRunner(
   const argKeys = Object.keys(firstInput);
   const argVals = Object.values(firstInput);
 
-  function cppType(val: unknown): string {
-    if (Array.isArray(val)) {
-      if (val.length > 0 && Array.isArray(val[0])) return "vector<vector<int>>";
-      if (val.length > 0 && typeof val[0] === "string") return "vector<string>";
-      return "vector<int>";
-    }
-    if (typeof val === "string") return "string";
-    if (typeof val === "boolean") return "bool";
-    return "int";
-  }
+  const classMatch = code.match(/(?:class\s+)(\w+)/);
+  const className = classMatch ? classMatch[1] : 'Solution';
 
   function extractJson(name: string, val: unknown): string {
     if (Array.isArray(val)) {
@@ -796,7 +797,8 @@ function generateCppRunner(
     }
     if (typeof val === "string") return `string ${name} = inputVal["${name}"];`;
     if (typeof val === "boolean") return `bool ${name} = inputVal["${name}"] == "true";`;
-    return `int ${name} = stoi(inputVal["${name}"]);`;
+    // Guard against empty string — stoi("") throws std::invalid_argument
+    return `int ${name} = inputVal["${name}"].empty() ? 0 : stoi(inputVal["${name}"]);`;
   }
 
   function serResultFromExpected(expected: string): string {
@@ -1013,7 +1015,7 @@ int main() {
       }
 
       ${argExtract}
-      Solution sol;
+      ${className} sol;
       auto result = sol.${fn}(${argCall});
       actual = ${serCode};
       auto end = chrono::high_resolution_clock::now();
@@ -1248,6 +1250,7 @@ function generateTsRunner(
 ): { files: Record<string, string>; command: string } {
   // Strip TypeScript type annotations to produce valid JS.
   // Order matters: more specific patterns must come before generic ones.
+  // CRITICAL: never use a bare /<[^>]+>/g — it breaks comparison operators like "i < n".
   const stripTypes = (ts: string): string =>
     ts
       .replace(/export\s+(default\s+)?class/g, 'class')
@@ -1255,7 +1258,7 @@ function generateTsRunner(
       .replace(/export\s+(default\s+)?const/g, 'const')
       .replace(/export\s+(default\s+)?let/g, 'let')
       .replace(/export\s+(default\s+)?var/g, 'var')
-      .replace(/:?\s*:\s*Array\s*<[^>]+>/g, '')
+      .replace(/:\s*(?:ReadonlyArray|Array|Map|Set|Promise|Record|Partial|Required|Readonly|Pick|Omit)\s*<[^>]+>/gi, '')
       .replace(/:?\s*:\s*\w+\s*\[\s*\]/g, '[]')
       .replace(/:?\s*:\s*\w+/g, '')
       .replace(/^(\s*)public\s+/gm, '$1')
@@ -1263,7 +1266,8 @@ function generateTsRunner(
       .replace(/^(\s*)protected\s+/gm, '$1')
       .replace(/^(\s*)readonly\s+/gm, '$1')
       .replace(/\s+as\s+\w+/g, '')
-      .replace(/<[^>]+>/g, '');
+      .replace(/\s*\|\s*(?:null|undefined)\b/g, '')
+      .replace(/(\w+)\s*<\s*\w+\s*>\s*\(/g, '$1(');
 
   const cleaned = stripTypes(code);
 
@@ -1458,10 +1462,46 @@ InputVals parseSimpleJson(const char* s) {
       while (*s) { if (*s == '\\\\' && *(s+1)) { s++; if (*s == '"') { iv.strVals[ki][vp++] = '"'; s++; continue; } } if (*s == '"') break; iv.strVals[ki][vp++] = *s; s++; }
       iv.strVals[ki][vp] = 0; iv.isStr[ki] = 1; s++;
     } else if (*s == '[') {
-      iv.isStr[ki] = 0; iv.valLens[ki] = 0; int* arr = iv.intVals[ki];
-      while (*s && *s != ']') { if (*s == '-' || (*s >= '0' && *s <= '9')) { arr[iv.valLens[ki]++] = atoi(s); while (*s && *s != ',' && *s != ']') s++; } else s++; }
-    } else {
+      if (*(s+1) == '"') {
+        // String array
+        s++; iv.isStr[ki] = 1; iv.valLens[ki] = 0; int strIdx = 0;
+        while (*s && *s != ']') {
+          while (*s && *s != '"') s++;
+          if (*s == '"') {
+            s++; int vp = 0;
+            while (*s && *s != '"') { if (*s == '\\\\' && *(s+1)) s++; iv.strVals[ki][vp++] = *s; s++; }
+            iv.strVals[ki][vp] = 0;
+            if (*s == '"') s++;
+            iv.valLens[ki] = strIdx;
+            strIdx++;
+            while (*s && (*s == ',' || *s == ' ')) s++;
+          }
+        }
+      } else {
+        // Integer array
+        iv.isStr[ki] = 0; iv.valLens[ki] = 0; int* arr = iv.intVals[ki];
+        while (*s && *s != ']') {
+          while (*s && (*s == ' ' || *s == ',')) s++;
+          if (*s == ']') break;
+          if (*s == '-' || (*s >= '0' && *s <= '9')) {
+            arr[iv.valLens[ki]++] = atoi(s);
+            while (*s && *s != ',' && *s != ']') s++;
+          } else {
+            s++;
+          }
+        }
+      }
+    } else if (*s == '"') {
+      s++; int vp = 0;
+      while (*s && *s != '"') { if (*s == '\\\\' && *(s+1)) s++; iv.strVals[ki][vp++] = *s; s++; }
+      iv.strVals[ki][vp] = 0; iv.isStr[ki] = 1;
+      if (*s == '"') s++;
+    } else if ((*s >= '0' && *s <= '9') || *s == '-') {
       iv.isStr[ki] = 0; iv.intVals[ki][0] = atoi(s); iv.valLens[ki] = 1;
+      while (*s && *s != ',' && *s != '}' && *s != ']') s++;
+    } else {
+      // Skip unrecognized value (null, true, false, etc.)
+      iv.isStr[ki] = 0; iv.intVals[ki][0] = 0; iv.valLens[ki] = 1;
       while (*s && *s != ',' && *s != '}' && *s != ']') s++;
     }
     ki++;

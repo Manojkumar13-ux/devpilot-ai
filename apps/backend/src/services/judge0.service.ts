@@ -32,7 +32,7 @@ export class Judge0Service {
   async execute(
     files: Record<string, string>,
     language: string,
-  ): Promise<{ results: any[]; error?: string; errorType?: string }> {
+  ): Promise<{ results: any[]; error?: string; errorType?: string; memory?: number }> {
     const langId = LANG_IDS[language];
     if (!langId) {
       return { results: [], error: `Unsupported language: ${language}`, errorType: 'runtime_error' };
@@ -81,7 +81,7 @@ export class Judge0Service {
 
       try {
         const parsed = JSON.parse(result.stdout || '{}');
-        return { results: parsed.results || [] };
+        return { results: parsed.results || [], memory: result.memory || 0 };
       } catch {
         logger.warn({ stdout: result.stdout }, 'Failed to parse Judge0 output as JSON');
         return { results: [], error: 'Failed to parse execution output', errorType: 'runtime_error' };
@@ -183,7 +183,9 @@ export class Judge0Service {
   }
 
   private buildJava(files: Record<string, string>, testCasesJson?: string): string {
-    const solutionCode = (files['Solution.java'] || '').replace('public class Solution', 'class Solution');
+    // Strip 'public' from any user-defined class to avoid conflict with public Main
+    let solutionCode = (files['Solution.java'] || '');
+    solutionCode = solutionCode.replace(/\bpublic\s+class\s+(\w+)/g, 'class $1');
     const runnerCode = files['Runner.java'] || '';
     const imports = `import java.util.*;\nimport java.io.*;\nimport java.nio.file.*;\nimport java.lang.reflect.*;`;
     const modifiedRunner = runnerCode

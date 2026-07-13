@@ -51,9 +51,10 @@ export const createWorker = async (): Promise<Worker | null> => {
         if (result.error) {
           const errorType = result.errorType || 'runtime_error';
           const status = errorType === 'timeout_error' ? 'TIMEOUT' : 'FAILED';
+          const memory = result.memory || 0;
           await prisma.submission.update({
             where: { id: submissionId },
-            data: { status, errorType, errorMessage: result.error, completedAt: new Date() },
+            data: { status, errorType, errorMessage: result.error, memory, completedAt: new Date() },
           });
           return { status, errorType, error: result.error };
         }
@@ -65,7 +66,7 @@ export const createWorker = async (): Promise<Worker | null> => {
         }
 
         let totalRuntime = 0;
-        let maxMemory = 0;
+        let maxMemory = result.memory || 0;
         for (const tr of testResults) {
           totalRuntime += tr.runtime || 0;
           if ((tr.memory || 0) > maxMemory) maxMemory = tr.memory;
