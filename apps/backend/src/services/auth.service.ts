@@ -1,4 +1,4 @@
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "@prisma/client";
 import type { User } from "@devpilot/shared";
@@ -6,11 +6,12 @@ import { config } from "../config.js";
 
 const prisma = new PrismaClient();
 
-function toUserResponse(user: { id: string; email: string; username: string; createdAt: Date }): User {
+function toUserResponse(user: { id: string; email: string; username: string; role: string; createdAt: Date }): User {
   return {
     id: user.id,
     email: user.email,
     username: user.username,
+    role: user.role,
     createdAt: user.createdAt.toISOString(),
   };
 }

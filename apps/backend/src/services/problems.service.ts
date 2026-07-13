@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import type { Problem, ProblemListItem } from "@devpilot/shared";
+import type { Problem, ProblemListItem, Difficulty, ProblemCategory } from "@devpilot/shared";
 
 const prisma = new PrismaClient();
 
@@ -24,15 +24,21 @@ export class ProblemsService {
         difficulty: true,
         category: true,
         tags: true,
+        acceptanceRate: true,
+        submissionCount: true,
+        createdAt: true,
       },
     });
     return problems.map((p) => ({
       id: p.id,
       title: p.title,
       slug: p.slug,
-      difficulty: p.difficulty as any,
-      category: p.category,
-      tags: p.tags,
+      difficulty: p.difficulty as Difficulty,
+      category: p.category as ProblemCategory,
+      tags: (p.tags as string[]) || [],
+      acceptanceRate: p.acceptanceRate,
+      submissionCount: p.submissionCount,
+      createdAt: p.createdAt.toISOString(),
     }));
   }
 
@@ -45,17 +51,20 @@ export class ProblemsService {
       id: problem.id,
       title: problem.title,
       slug: problem.slug,
-      difficulty: problem.difficulty as any,
-      category: problem.category,
+      difficulty: problem.difficulty as Difficulty,
+      category: problem.category as ProblemCategory,
       description: problem.description,
       constraints: problem.constraints,
       examples: problem.examples as any,
       starterCode: problem.starterCode as any,
-      tags: problem.tags,
-      companies: problem.companies,
-      hints: problem.hints as any,
+      tags: (problem.tags as string[]) || [],
+      companies: (problem.companies as string[]) || [],
+      hints: (problem.hints as string[]) || [],
       editorial: problem.editorial,
       complexity: problem.complexity as any,
+      acceptanceRate: problem.acceptanceRate,
+      submissionCount: problem.submissionCount,
+      isPublished: problem.isPublished,
       createdAt: problem.createdAt.toISOString(),
     };
   }

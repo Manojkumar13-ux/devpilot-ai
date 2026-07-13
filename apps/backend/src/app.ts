@@ -1,6 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
-import { authRouter } from "./routes/auth.js";
+import authRouter from "./routes/auth.js";
 import { problemsRouter } from "./routes/problems.js";
 
 const app: Express = express();
