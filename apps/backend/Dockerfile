@@ -30,6 +30,7 @@ COPY --from=builder /app/apps/backend/prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/backend/node_modules ./apps/backend/node_modules
 COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/infrastructure ./infrastructure
 USER devpilot
 EXPOSE 4000
-CMD ["sh", "-c", "apps/backend/node_modules/.bin/prisma db push --skip-generate && node dist/index.js"]
+CMD ["sh", "-c", "apps/backend/node_modules/.bin/prisma db push --skip-generate && apps/backend/node_modules/.bin/tsx infrastructure/scripts/seed.ts && node dist/index.js"]
