@@ -167,12 +167,21 @@ function generateJavaRunner(
 import java.util.*;
 import java.io.*;
 import java.nio.file.*;
+import java.lang.reflect.*;
 
 public class Runner {
   private static final String TD = "${WORK_DIR}";
   static List<Map<String, Object>> testCases;
+  private static Method solutionMethod;
+  private static Class<?>[] paramTypes;
+  private static Class<?> returnType;
 
   public static void main(String[] args) throws Exception {
+    Solution sol = new Solution();
+    solutionMethod = sol.getClass().getDeclaredMethods()[0];
+    paramTypes = solutionMethod.getParameterTypes();
+    returnType = solutionMethod.getReturnType();
+
     String content = new String(Files.readAllBytes(Paths.get(TD + "/testcases.json")));
     testCases = parseTests(content);
     List<Map<String, Object>> results = new ArrayList<>();
@@ -187,28 +196,28 @@ public class Runner {
         } else {
           input = (Map<String, Object>) rawInput;
         }
-        Object result = invoke(input);
+        Object[] invokeArgs = new Object[paramTypes.length];
+        int idx = 0;
+        for (Map.Entry<String, Object> e : input.entrySet()) {
+          invokeArgs[idx] = convert(e.getValue(), paramTypes[idx]);
+          idx++;
+        }
+        Object result = solutionMethod.invoke(sol, invokeArgs);
         long end = System.nanoTime();
         double rt = (end - start) / 1_000_000.0;
         String expected = (String) tc.get("expectedOutput");
         String actual = toJson(result);
         boolean pass = actual.equals(expected);
         Map<String, Object> r = new LinkedHashMap<>();
-        r.put("pass", pass);
-        r.put("runtime", Math.round(rt * 100) / 100.0);
-        r.put("memory", 0);
-        r.put("error", null);
-        r.put("expected", expected);
-        r.put("actual", actual);
+        r.put("pass", pass); r.put("runtime", Math.round(rt * 100) / 100.0);
+        r.put("memory", 0); r.put("error", null);
+        r.put("expected", expected); r.put("actual", actual);
         results.add(r);
       } catch (Exception e) {
         Map<String, Object> r = new LinkedHashMap<>();
-        r.put("pass", false);
-        r.put("runtime", 0);
-        r.put("memory", 0);
+        r.put("pass", false); r.put("runtime", 0); r.put("memory", 0);
         r.put("error", e.getMessage() == null ? "Runtime error" : e.getMessage());
-        r.put("expected", tc.get("expectedOutput"));
-        r.put("actual", null);
+        r.put("expected", tc.get("expectedOutput")); r.put("actual", null);
         results.add(r);
       }
     }
@@ -217,70 +226,79 @@ public class Runner {
     System.out.println(toJson(out));
   }
 
-  static Object invoke(Map<String, Object> input) throws Exception {
-    // Build Solution class method call using reflection
-    Solution sol = new Solution();
-    Class<?>[] paramTypes = new Class<?>[input.size()];
-    Object[] args = new Object[input.size()];
-    int i = 0;
-    for (Map.Entry<String, Object> e : input.entrySet()) {
-      Object val = e.getValue();
-      if (val instanceof List) {
-        List<?> list = (List<?>) val;
-        if (list.isEmpty()) {
-          paramTypes[i] = int[].class;
-          args[i] = new int[0];
-        } else if (list.get(0) instanceof List) {
-          paramTypes[i] = int[][].class;
-          args[i] = listTo2dInt((List<List<?>>) list);
-        } else if (list.get(0) instanceof String) {
-          paramTypes[i] = String[].class;
-          args[i] = list.toArray(new String[0]);
-        } else if (list.get(0) instanceof Double || list.get(0) instanceof Integer) {
-          paramTypes[i] = int[].class;
-          args[i] = listToInt(list);
-        } else if (list.get(0) instanceof Character) {
-          paramTypes[i] = char[].class;
-          args[i] = listToChar(list);
+  static Object convert(Object val, Class<?> target) {
+    if (val == null) return null;
+    if (target == int.class || target == Integer.class) return ((Number) val).intValue();
+    if (target == long.class || target == Long.class) return ((Number) val).longValue();
+    if (target == double.class || target == Double.class) return ((Number) val).doubleValue();
+    if (target == float.class || target == Float.class) return ((Number) val).floatValue();
+    if (target == String.class) return val instanceof String ? val : val.toString();
+    if (target == boolean.class || target == Boolean.class) return val instanceof Boolean ? val : Boolean.valueOf(val.toString());
+    if (target == int[].class) {
+      List<?> list = (List<?>) val; int[] arr = new int[list.size()];
+      for (int i = 0; i < list.size(); i++) arr[i] = ((Number) list.get(i)).intValue(); return arr;
+    }
+    if (target == int[][].class) {
+      List<List<?>> list = (List<List<?>>) val; int[][] arr = new int[list.size()][];
+      for (int i = 0; i < list.size(); i++) { List<?> inner = list.get(i); arr[i] = new int[inner.size()]; for (int j = 0; j < inner.size(); j++) arr[i][j] = ((Number) inner.get(j)).intValue(); } return arr;
+    }
+    if (target == long[].class) {
+      List<?> list = (List<?>) val; long[] arr = new long[list.size()];
+      for (int i = 0; i < list.size(); i++) arr[i] = ((Number) list.get(i)).longValue(); return arr;
+    }
+    if (target == double[].class) {
+      List<?> list = (List<?>) val; double[] arr = new double[list.size()];
+      for (int i = 0; i < list.size(); i++) arr[i] = ((Number) list.get(i)).doubleValue(); return arr;
+    }
+    if (target == String[].class) { List<?> list = (List<?>) val; return list.toArray(new String[0]); }
+    if (target == char[].class) {
+      List<?> list = (List<?>) val; char[] arr = new char[list.size()];
+      for (int i = 0; i < list.size(); i++) arr[i] = list.get(i) instanceof String ? ((String)list.get(i)).charAt(0) : (char)list.get(i); return arr;
+    }
+    if (target == char[][].class) {
+      List<List<?>> list = (List<List<?>>) val; char[][] arr = new char[list.size()][];
+      for (int i = 0; i < list.size(); i++) { List<?> inner = list.get(i); arr[i] = new char[inner.size()]; for (int j = 0; j < inner.size(); j++) arr[i][j] = inner.get(j) instanceof String ? ((String)inner.get(j)).charAt(0) : (char)inner.get(j); } return arr;
+    }
+    String simpleName = target.getSimpleName();
+    if ((simpleName.equals("ListNode") || simpleName.equals("Node")) && val instanceof List) {
+      List<?> list = (List<?>) val;
+      try {
+        Constructor<?> ctor = target.getDeclaredConstructor(int.class);
+        Object dummy = target.getDeclaredConstructor().newInstance();
+        Field valField = target.getDeclaredField("val");
+        Field nextField = target.getDeclaredField("next");
+        Object head = null, prev = null;
+        for (Object item : list) {
+          Object node = ctor.newInstance(((Number) item).intValue());
+          if (head == null) head = node;
+          if (prev != null) nextField.set(prev, node);
+          prev = node;
         }
-      } else if (val instanceof String) {
-        paramTypes[i] = String.class;
-        args[i] = val;
-      } else if (val instanceof Boolean) {
-        paramTypes[i] = boolean.class;
-        args[i] = val;
-      } else if (val instanceof Number) {
-        paramTypes[i] = int.class;
-        args[i] = ((Number) val).intValue();
-      } else if (val == null) {
-        paramTypes[i] = Object.class;
-        args[i] = null;
-      }
-      i++;
+        return head;
+      } catch (Exception e) { return val; }
     }
-    java.lang.reflect.Method method = Solution.class.getMethod("${fn}", paramTypes);
-    return method.invoke(sol, args);
-  }
-
-  static int[] listToInt(List<?> list) {
-    int[] arr = new int[list.size()];
-    for (int i = 0; i < list.size(); i++) arr[i] = ((Number) list.get(i)).intValue();
-    return arr;
-  }
-
-  static char[] listToChar(List<?> list) {
-    char[] arr = new char[list.size()];
-    for (int i = 0; i < list.size(); i++) {
-      Object v = list.get(i);
-      arr[i] = v instanceof String ? ((String) v).charAt(0) : (char) v;
+    if (simpleName.equals("TreeNode") && val instanceof List) {
+      List<?> list = (List<?>) val;
+      try {
+        Constructor<?> ctor = target.getDeclaredConstructor(int.class);
+        Field leftField = target.getDeclaredField("left");
+        Field rightField = target.getDeclaredField("right");
+        if (list.isEmpty() || list.get(0) == null) return null;
+        Object root = ctor.newInstance(((Number) list.get(0)).intValue());
+        Queue<Object> q = new LinkedList<>(); q.offer(root);
+        int i = 1;
+        while (!q.isEmpty() && i < list.size()) {
+          Object node = q.poll();
+          if (list.get(i) != null) { Object left = ctor.newInstance(((Number) list.get(i)).intValue()); leftField.set(node, left); q.offer(left); }
+          i++;
+          if (i < list.size() && list.get(i) != null) { Object right = ctor.newInstance(((Number) list.get(i)).intValue()); rightField.set(node, right); q.offer(right); }
+          i++;
+        }
+        return root;
+      } catch (Exception e) { return val; }
     }
-    return arr;
-  }
-
-  static int[][] listTo2dInt(List<List<?>> list) {
-    int[][] arr = new int[list.size()][];
-    for (int i = 0; i < list.size(); i++) arr[i] = listToInt(list.get(i));
-    return arr;
+    if (val instanceof List) return val;
+    return val;
   }
 
   static List<Map<String, Object>> parseTests(String json) {
@@ -288,19 +306,14 @@ public class Runner {
     json = json.trim();
     if (!json.startsWith("[")) return result;
     json = json.substring(1, json.length() - 1).trim();
-    int depth = 0;
-    int start = 0;
-    boolean inStr = false;
+    int depth = 0; int start = 0; boolean inStr = false;
     for (int i = 0; i < json.length(); i++) {
       char c = json.charAt(i);
       if (c == '"' && (i == 0 || json.charAt(i-1) != '\\\\')) inStr = !inStr;
       if (inStr) continue;
       if (c == '{' || c == '[') depth++;
       else if (c == '}' || c == ']') depth--;
-      else if (c == ',' && depth == 0) {
-        result.add(parseObj(json.substring(start, i)));
-        start = i + 1;
-      }
+      else if (c == ',' && depth == 0) { result.add(parseObj(json.substring(start, i))); start = i + 1; }
     }
     if (start < json.length()) result.add(parseObj(json.substring(start)));
     return result;
@@ -316,8 +329,7 @@ public class Runner {
       while (i < s.length() && s.charAt(i) == ' ') i++;
       if (i >= s.length()) break;
       if (s.charAt(i) == '"') {
-        i++;
-        StringBuilder key = new StringBuilder();
+        i++; StringBuilder key = new StringBuilder();
         while (i < s.length() && s.charAt(i) != '"') {
           if (s.charAt(i) == '\\\\' && i + 1 < s.length()) { key.append(s.charAt(i+1)); i += 2; }
           else { key.append(s.charAt(i)); i++; }
@@ -343,8 +355,7 @@ public class Runner {
     if (i >= s.length()) return new ParseResult(null, i);
     char c = s.charAt(i);
     if (c == '"') {
-      i++;
-      StringBuilder sb = new StringBuilder();
+      i++; StringBuilder sb = new StringBuilder();
       while (i < s.length() && s.charAt(i) != '"') {
         if (s.charAt(i) == '\\\\' && i + 1 < s.length()) { sb.append(s.charAt(i+1)); i += 2; }
         else { sb.append(s.charAt(i)); i++; }
@@ -352,8 +363,7 @@ public class Runner {
       return new ParseResult(sb.toString(), i + 1);
     }
     if (c == '[') {
-      List<Object> list = new ArrayList<>();
-      i++;
+      List<Object> list = new ArrayList<>(); i++;
       boolean inStr = false;
       while (i < s.length() && !(s.charAt(i) == ']' && !inStr)) {
         if (s.charAt(i) == '"' && (i == 0 || s.charAt(i-1) != '\\\\')) inStr = !inStr;
@@ -365,10 +375,7 @@ public class Runner {
       }
       return new ParseResult(list, i + 1);
     }
-    if (c == '{') {
-      int end = findMatching(s, i);
-      return new ParseResult(parseObj(s.substring(i, end + 1)), end + 1);
-    }
+    if (c == '{') { int end = findMatching(s, i); return new ParseResult(parseObj(s.substring(i, end + 1)), end + 1); }
     if (c == 'n') { i += 4; return new ParseResult(null, i); }
     if (c == 't') { i += 4; return new ParseResult(true, i); }
     if (c == 'f') { i += 5; return new ParseResult(false, i); }
@@ -382,17 +389,12 @@ public class Runner {
   }
 
   static int findMatching(String s, int i) {
-    char open = s.charAt(i);
-    char close = open == '{' ? '}' : ']';
-    int depth = 1; i++;
-    boolean inStr = false;
+    char open = s.charAt(i); char close = open == '{' ? '}' : ']';
+    int depth = 1; i++; boolean inStr = false;
     while (i < s.length() && depth > 0) {
       char c = s.charAt(i);
       if (c == '"' && (i == 0 || s.charAt(i-1) != '\\\\')) inStr = !inStr;
-      if (!inStr) {
-        if (c == open) depth++;
-        else if (c == close) depth--;
-      }
+      if (!inStr) { if (c == open) depth++; else if (c == close) depth--; }
       i++;
     }
     return i - 1;
@@ -402,11 +404,41 @@ public class Runner {
     if (o == null) return "null";
     if (o instanceof String) return "\\"" + escape((String) o) + "\\"";
     if (o instanceof Boolean || o instanceof Number) return o.toString();
+    String cn = o.getClass().getSimpleName();
+    if ((cn.equals("ListNode") || cn.equals("Node"))) {
+      try {
+        List<Object> list = new ArrayList<>();
+        Field valField = o.getClass().getDeclaredField("val");
+        Field nextField = o.getClass().getDeclaredField("next");
+        Object curr = o;
+        while (curr != null) {
+          list.add(valField.get(curr));
+          curr = nextField.get(curr);
+        }
+        return toJson(list);
+      } catch (Exception e) { return o.toString(); }
+    }
+    if (cn.equals("TreeNode")) {
+      try {
+        List<Object> list = new ArrayList<>();
+        Field valField = o.getClass().getDeclaredField("val");
+        Field leftField = o.getClass().getDeclaredField("left");
+        Field rightField = o.getClass().getDeclaredField("right");
+        Queue<Object> q = new LinkedList<>(); q.offer(o);
+        while (!q.isEmpty()) {
+          Object node = q.poll();
+          if (node == null) { list.add(null); continue; }
+          list.add(valField.get(node)); q.offer(leftField.get(node)); q.offer(rightField.get(node));
+        }
+        int last = list.size() - 1;
+        while (last >= 0 && list.get(last) == null) last--;
+        return toJson(last >= 0 ? list.subList(0, last + 1) : new ArrayList<>());
+      } catch (Exception e) { return o.toString(); }
+    }
     if (o instanceof List) {
       StringBuilder sb = new StringBuilder("[");
       for (Object v : (List<?>) o) { if (sb.length() > 1) sb.append(","); sb.append(toJson(v)); }
-      sb.append("]");
-      return sb.toString();
+      sb.append("]"); return sb.toString();
     }
     if (o instanceof Map) {
       StringBuilder sb = new StringBuilder("{");
@@ -414,23 +446,17 @@ public class Runner {
         if (sb.length() > 1) sb.append(",");
         sb.append("\\"").append(e.getKey()).append("\\":").append(toJson(e.getValue()));
       }
-      sb.append("}");
-      return sb.toString();
+      sb.append("}"); return sb.toString();
     }
     if (o instanceof int[]) return toJson(toList((int[]) o));
+    if (o instanceof long[]) { List<Long> list = new ArrayList<>(); for (long v : (long[])o) list.add(v); return toJson(list); }
+    if (o instanceof double[]) { List<Double> list = new ArrayList<>(); for (double v : (double[])o) list.add(v); return toJson(list); }
     if (o instanceof char[]) return toJson(new String((char[]) o));
     return o.toString();
   }
 
-  static String escape(String s) {
-    return s.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\\"");
-  }
-
-  static List<Integer> toList(int[] arr) {
-    List<Integer> list = new ArrayList<>();
-    for (int v : arr) list.add(v);
-    return list;
-  }
+  static String escape(String s) { return s.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\\""); }
+  static List<Integer> toList(int[] arr) { List<Integer> list = new ArrayList<>(); for (int v : arr) list.add(v); return list; }
 }
 `;
   return {
