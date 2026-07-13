@@ -1,4 +1,4 @@
-﻿import { spawn } from 'child_process';
+﻿import { spawn, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -7,6 +7,32 @@ import { logger } from '../lib/logger.js';
 export class SandboxService {
     private sandboxImageName = 'devpilot-sandbox:v3';
     private sandboxDir = path.join(process.cwd(), 'infrastructure', 'docker', 'sandbox');
+    private dockerCmd: string;
+
+    constructor() {
+        this.dockerCmd = SandboxService.resolveDocker();
+    }
+
+    private static resolveDocker(): string {
+        const envPath = process.env.DOCKER_PATH;
+        if (envPath && fs.existsSync(envPath)) return envPath;
+        // Common Windows Docker installation paths
+        const candidates = [
+            'docker',
+            'docker.exe',
+            'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe',
+            'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker',
+            '/usr/bin/docker',
+            '/usr/local/bin/docker',
+        ];
+        for (const cmd of candidates) {
+            try {
+                execSync(`"${cmd}" version`, { stdio: 'pipe', timeout: 5000 });
+                return cmd;
+            } catch { continue; }
+        }
+        return 'docker';
+    }
 
     async ensureSandboxImage(): Promise<void> {
         await this.dockerSpawn(['version', '--format', '{{.Server.Version}}']);
@@ -32,7 +58,7 @@ export class SandboxService {
 
     private dockerSpawn(args: string[]): Promise<string> {
         return new Promise((resolve, reject) => {
-            const proc = spawn('docker', args);
+            const proc = spawn(this.dockerCmd, args);
             let stdout = '';
             let stderr = '';
             proc.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
@@ -70,7 +96,7 @@ export class SandboxService {
         const shellCmd = writeCmds.join(' && ') + ' && ' + command;
 
         return new Promise((resolve) => {
-            const docker = spawn('docker', [
+            const docker = spawn(this.dockerCmd, [
                 'run', '-i', '--rm',
                 '--entrypoint', 'sh',
                 '--network', 'none',
