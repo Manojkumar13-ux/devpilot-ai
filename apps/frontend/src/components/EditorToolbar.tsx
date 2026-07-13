@@ -17,20 +17,12 @@ interface EditorToolbarProps {
 }
 
 const LANGUAGES: { value: string; label: string; color: string; executable: boolean }[] = [
-  { value: "javascript", label: "JavaScript", color: "text-yellow-400", executable: true },
-  { value: "typescript", label: "TypeScript", color: "text-blue-400", executable: true },
   { value: "python", label: "Python", color: "text-green-400", executable: true },
   { value: "java", label: "Java", color: "text-orange-400", executable: true },
-  { value: "c", label: "C", color: "text-blue-300", executable: false },
   { value: "cpp", label: "C++", color: "text-blue-500", executable: true },
-  { value: "csharp", label: "C#", color: "text-purple-400", executable: false },
+  { value: "c", label: "C", color: "text-blue-300", executable: true },
   { value: "go", label: "Go", color: "text-cyan-400", executable: true },
   { value: "rust", label: "Rust", color: "text-orange-500", executable: true },
-  { value: "kotlin", label: "Kotlin", color: "text-purple-500", executable: false },
-  { value: "swift", label: "Swift", color: "text-red-400", executable: false },
-  { value: "php", label: "PHP", color: "text-indigo-400", executable: false },
-  { value: "ruby", label: "Ruby", color: "text-red-500", executable: false },
-  { value: "dart", label: "Dart", color: "text-cyan-500", executable: false },
 ];
 
 export default function EditorToolbar({

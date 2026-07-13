@@ -40,7 +40,7 @@ export default function ProblemDetail() {
   const [problem, setProblem] = useState<ProblemWithTestCases | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [language, setLanguage] = useState<string>("javascript");
+  const [language, setLanguage] = useState<string>("python");
   const [code, setCode] = useState("");
   const [saved, setSaved] = useState(true);
   const [theme, setTheme] = useState("vs-dark");
@@ -231,6 +231,15 @@ export default function ProblemDetail() {
     <div ref={containerRef} className={`flex h-[calc(100vh-64px)] bg-[#0a0a1a] ${fullscreen ? "fixed inset-0 z-50 h-screen" : ""}`}>
       {/* Left Pane — glassmorphism, scrollable */}
       <div className="w-[380px] flex-shrink-0 overflow-y-auto border-r border-white/10 p-4 space-y-3 bg-black/20 backdrop-blur-sm">
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="flex items-center gap-2 text-xs text-white/50 hover:text-white transition-colors mb-2"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Dashboard
+        </button>
         <ProblemInfo problem={problem} />
         <AiAssistant />
       </div>

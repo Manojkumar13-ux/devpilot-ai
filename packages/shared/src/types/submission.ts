@@ -34,6 +34,7 @@ export interface Submission {
   memory: number | null;
   errorType: ErrorType;
   errorMessage: string | null;
+  compileWarnings?: string | null;
   createdAt: string;
   completedAt: string | null;
   startedAt: string | null;

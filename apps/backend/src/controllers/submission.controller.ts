@@ -187,6 +187,7 @@ export const getSubmissionStatus = async (req: AuthRequest, res: Response): Prom
       testResults: submission.testResults,
       errorType: submission.errorType,
       errorMessage: submission.errorMessage,
+      compileWarnings: submission.compileWarnings,
       runtime: submission.runtime,
       memory: submission.memory,
       completedAt: submission.completedAt,

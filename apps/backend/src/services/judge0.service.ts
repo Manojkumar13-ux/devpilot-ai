@@ -32,7 +32,7 @@ export class Judge0Service {
   async execute(
     files: Record<string, string>,
     language: string,
-  ): Promise<{ results: any[]; error?: string; errorType?: string; memory?: number }> {
+  ): Promise<{ results: any[]; error?: string; errorType?: string; memory?: number; compileWarnings?: string }> {
     const langId = LANG_IDS[language];
     if (!langId) {
       return { results: [], error: `Unsupported language: ${language}`, errorType: 'runtime_error' };
@@ -65,8 +65,20 @@ export class Judge0Service {
         const statusId = result.status.id;
         const compileOut = result.compile_output || '';
         const stdErr = result.stderr || '';
-        let errorType = 'runtime_error';
 
+        // Compiler warnings (e.g., Java "Note: ...") are NOT compilation errors.
+        // javac exits 0 with warnings but Judge0 may return status 6 if compile_output is non-empty.
+        // Detect this: if there's no "error:" keyword, it's just warnings — try to use stdout.
+        if (compileOut && !/error:/i.test(compileOut)) {
+          try {
+            const parsed = JSON.parse(result.stdout || '{}');
+            if (parsed && Array.isArray(parsed.results)) {
+              return { results: parsed.results, memory: result.memory || 0, compileWarnings: compileOut };
+            }
+          } catch { /* not a false positive — fall through to real error handling */ }
+        }
+
+        let errorType = 'runtime_error';
         if (statusId === 5) {
           errorType = 'timeout_error';
         } else if (statusId === 6) {

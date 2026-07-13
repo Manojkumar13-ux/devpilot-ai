@@ -102,9 +102,10 @@ model Submission {
   testResults  Json      @default("[]")
   runtime      Float     @default(0)
   memory       Float     @default(0)
-  errorMessage String?
-  errorType    String?
-  startedAt    DateTime?
+  errorMessage    String?
+  errorType       String?
+  compileWarnings String?   @db.Text
+  startedAt       DateTime?
   completedAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

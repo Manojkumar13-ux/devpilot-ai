@@ -59,6 +59,14 @@ export const createWorker = async (): Promise<Worker | null> => {
           return { status, errorType, error: result.error };
         }
 
+        // Store compiler warnings if present (e.g., Java "Note:" messages)
+        if (result.compileWarnings) {
+          await prisma.submission.update({
+            where: { id: submissionId },
+            data: { compileWarnings: result.compileWarnings },
+          });
+        }
+
         const testResults = result.results || [];
         let status = 'ACCEPTED';
         for (const tr of testResults) {

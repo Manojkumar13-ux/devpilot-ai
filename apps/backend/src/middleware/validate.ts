@@ -24,12 +24,12 @@ export const schemas = {
     run: z.object({
       problemId: z.string().min(1),
       code: z.string().min(1).max(50000),
-      language: z.enum(['javascript', 'python', 'java', 'cpp', 'go', 'rust', 'typescript']),
+      language: z.enum(['python', 'java', 'cpp', 'c', 'go', 'rust']),
     }),
     submit: z.object({
       problemId: z.string().min(1),
       code: z.string().min(1).max(50000),
-      language: z.enum(['javascript', 'python', 'java', 'cpp', 'go', 'rust', 'typescript']),
+      language: z.enum(['python', 'java', 'cpp', 'c', 'go', 'rust']),
     }),
     interviewAnswer: z.object({
       answer: z.string().min(1).max(10000),

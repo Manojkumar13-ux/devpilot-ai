@@ -348,7 +348,7 @@ export default function AdminPage() {
                 </select>
                 <select value={subLang} onChange={e => { setSubLang(e.target.value); setSubPage(1); }}
                   className="px-3 py-1.5 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] text-white text-xs focus:outline-none focus:border-[#6c63ff]">
-                  {["All", "javascript", "python", "java", "cpp", "go", "rust"].map(l => (
+                  {["All", "python", "java", "cpp", "c", "go", "rust"].map(l => (
                     <option key={l} value={l} className="bg-[#1a1a2e]">{l === "All" ? "All Languages" : l}</option>
                   ))}
                 </select>
