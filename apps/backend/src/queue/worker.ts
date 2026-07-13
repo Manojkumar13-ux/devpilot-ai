@@ -3,11 +3,11 @@ import { Worker, Job } from 'bullmq';
 import { redisConnection, redisHealthConfig } from './redis.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
-import { SandboxService } from '../services/sandbox.service.js';
+import { PistonService } from '../services/piston.service.js';
 import { generateSubmitRunner } from '../services/runner.js';
 import { generateAiReview, AiReviewError } from '../services/ai-review.service.js';
 
-const sandboxService = new SandboxService();
+const pistonService = new PistonService();
 
 async function checkRedis(): Promise<boolean> {
   const client = new IORedis(redisHealthConfig);
@@ -45,8 +45,8 @@ export const createWorker = async (): Promise<Worker | null> => {
           expectedOutput: tc.expected || tc.expectedOutput || '',
         }));
 
-        const { files, command } = generateSubmitRunner(language, code, runnerTestCases);
-        const result = await sandboxService.dockerRunWithRunner(files, command);
+        const { files } = generateSubmitRunner(language, code, runnerTestCases);
+        const result = await pistonService.execute(files, language);
 
         if (result.error) {
           const errorType = result.errorType || 'runtime_error';

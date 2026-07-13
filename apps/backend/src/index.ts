@@ -15,7 +15,7 @@ import healthRoutes from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { createWorker } from './queue/worker.js';
-import { SandboxService } from './services/sandbox.service.js';
+
 import { logger } from './lib/logger.js';
 
 validateEnv();
@@ -127,8 +127,4 @@ app.listen(PORT, () => {
     if (worker) logger.info('BullMQ worker started');
   });
 
-  const sandbox = new SandboxService();
-  sandbox.ensureSandboxImage().catch((err: Error) => {
-    logger.warn({ err: err.message }, 'Sandbox image not available — first submission will trigger a build');
-  });
 });
