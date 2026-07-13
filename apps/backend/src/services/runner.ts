@@ -14,8 +14,9 @@ function extractFunctionName(code: string, language: string): string | null {
       return pyDefs.length > 0 ? pyDefs[pyDefs.length - 1][1] : null;
     }
     case "java": {
+      // Only match public methods to avoid picking up private/package-private helpers (dfs, validate, merge)
+      const methods = [...code.matchAll(/public\s+\S+\s+(\w+)\s*\([^)]*\)\s*(?:\{|throws)/g)];
       const skip = new Set(['main', 'toString', 'hashCode', 'equals', 'Solution', 'ListNode', 'TreeNode', 'Node']);
-      const methods = [...code.matchAll(/(?:public\s+\S+\s+)?(\w+)\s*\([^)]*\)\s*(?:\{|throws)/g)];
       const candidates = methods.filter(m => !skip.has(m[1]));
       if (candidates.length > 0) return candidates[candidates.length - 1][1];
       const fallback = code.match(/(\w+)\s*\([^)]*\)\s*\{/);
