@@ -55,7 +55,7 @@ export class ProblemsService {
       category: problem.category as ProblemCategory,
       description: problem.description,
       constraints: problem.constraints,
-      examples: problem.examples as any,
+      examples: problem.examples as any as string[],
       starterCode: problem.starterCode as any,
       tags: (problem.tags as string[]) || [],
       companies: (problem.companies as string[]) || [],

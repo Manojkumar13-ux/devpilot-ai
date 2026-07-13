@@ -18,6 +18,7 @@ export interface Problem {
   category: ProblemCategory;
   description: string;
   constraints: string;
+  examples: string[];
   starterCode: Record<Language, string>;
   tags: string[];
   companies: string[];
