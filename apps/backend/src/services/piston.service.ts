@@ -5,6 +5,18 @@ interface PistonFile {
   content: string;
 }
 
+interface PistonStage {
+  stdout: string;
+  stderr: string;
+  code: number;
+  signal: string | null;
+}
+
+interface PistonExecuteResponse {
+  run: PistonStage;
+  compile?: PistonStage;
+}
+
 interface PistonRequest {
   language: string;
   version: string;
@@ -13,15 +25,6 @@ interface PistonRequest {
   args?: string[];
   run_timeout?: number;
   compile_timeout?: number;
-}
-
-interface PistonResult {
-  ran: boolean;
-  output: string;
-  stdout: string;
-  stderr: string;
-  code: number;
-  signal: string | null;
 }
 
 const LANG_MAP: Record<string, { language: string; version: string }> = {
@@ -36,6 +39,7 @@ const LANG_MAP: Record<string, { language: string; version: string }> = {
 };
 
 const PISTON_API = process.env.PISTON_API_URL || 'https://emkc.org/api/v2/piston/execute';
+const PISTON_API_KEY = process.env.PISTON_API_KEY || '';
 
 export class PistonService {
   async execute(
@@ -59,35 +63,48 @@ export class PistonService {
     };
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (PISTON_API_KEY) {
+        headers['Authorization'] = `Bearer ${PISTON_API_KEY}`;
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+
       const res = await fetch(PISTON_API, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeout);
 
       if (!res.ok) {
         const text = await res.text();
         logger.error({ status: res.status, body: text }, 'Piston API error');
+        if (res.status === 401 || res.status === 403) {
+          return { results: [], error: 'Code execution API requires authorization. Set PISTON_API_KEY env var or self-host Piston.', errorType: 'runtime_error' };
+        }
         return { results: [], error: `Execution service error (HTTP ${res.status})`, errorType: 'runtime_error' };
       }
 
-      const result = await res.json() as PistonResult;
+      const result = await res.json() as PistonExecuteResponse;
 
-      if (!result.ran) {
-        const errMsg = result.stderr || result.output || 'Execution failed';
-        logger.error({ stderr: result.stderr, output: result.output }, 'Piston execution failed');
+      if (!result.run) {
+        return { results: [], error: 'Execution service returned no run output', errorType: 'runtime_error' };
+      }
+
+      if (result.run.code !== 0) {
+        const errMsg = result.run.stderr || result.run.stdout || 'Execution failed';
         return { results: [], error: errMsg, errorType: 'runtime_error' };
       }
 
-      if (result.code !== 0) {
-        return { results: [], error: result.stderr || result.output, errorType: 'runtime_error' };
-      }
-
       try {
-        const parsed = JSON.parse(result.stdout);
+        const parsed = JSON.parse(result.run.stdout);
         return { results: parsed.results || [] };
       } catch {
-        logger.warn({ stdout: result.stdout }, 'Failed to parse Piston output as JSON');
+        logger.warn({ stdout: result.run.stdout }, 'Failed to parse Piston output as JSON');
         return { results: [], error: 'Failed to parse execution output', errorType: 'runtime_error' };
       }
     } catch (err: any) {
@@ -167,8 +184,8 @@ export class PistonService {
     for (const [name, content] of Object.entries(files)) {
       if (name === 'testcases.json') continue;
       const lines = content.split('\n');
-      let inFileRead = false;
       const result: string[] = [];
+      let inFileRead = false;
       for (const line of lines) {
         if (/FILE\s*\*\s*\w+\s*=\s*fopen\s*\(/.test(line)) {
           result.push(`  const char* jsonContent = "${escaped}";`);
