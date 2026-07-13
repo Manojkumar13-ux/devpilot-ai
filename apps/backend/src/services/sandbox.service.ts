@@ -50,7 +50,14 @@ export class SandboxService {
         command: string,
         timeout = 30000
     ): Promise<{ output: string; error?: string; errorType?: string; memory?: number; compileWarnings?: string; results?: any[] }> {
-        await this.ensureSandboxImage();
+        try {
+            await this.ensureSandboxImage();
+        } catch (err: any) {
+            if (err.code === 'ENOENT') {
+                return { output: '', error: 'Docker is not installed or not accessible. Install Docker Desktop and ensure it is running, or set JUDGE0_API_URL / PISTON_API_URL to use a remote execution service.', errorType: 'runtime_error', results: [] };
+            }
+            return { output: '', error: err.message || 'Docker sandbox failed to initialize', errorType: 'runtime_error', results: [] };
+        }
 
         // Write runner files into the container using base64-inline Node.js commands.
         // This bypasses the baked-in runner.js entirely and avoids bind mount issues on Windows.
