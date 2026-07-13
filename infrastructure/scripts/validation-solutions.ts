@@ -241,10 +241,10 @@ solutions["ransom-note"] = {
     return true;
   }
 }`,
-  python: `def can_construct(ransom_note, magazine):
+  python: `def can_construct(ransomNote, magazine):
     count = [0] * 26
     for c in magazine: count[ord(c) - 97] += 1
-    for c in ransom_note:
+    for c in ransomNote:
         count[ord(c) - 97] -= 1
         if count[ord(c) - 97] < 0: return False
     return True`,
@@ -684,7 +684,20 @@ solutions["add-two-numbers"] = {
         self.val = val
         self.next = next
 
+def _to_list(arr):
+    if not arr: return None
+    head = ListNode(arr[0]); cur = head
+    for v in arr[1:]: cur.next = ListNode(v); cur = cur.next
+    return head
+
+def _from_list(node):
+    res = []
+    while node: res.append(node.val); node = node.next
+    return res
+
 def add_two_numbers(l1, l2):
+    if isinstance(l1, list): l1 = _to_list(l1)
+    if isinstance(l2, list): l2 = _to_list(l2)
     dummy = tail = ListNode()
     carry = 0
     while l1 or l2 or carry:
@@ -694,7 +707,7 @@ def add_two_numbers(l1, l2):
         tail.next = ListNode(s % 10)
         tail = tail.next
         carry = s // 10
-    return dummy.next`,
+    return _from_list(dummy.next)`,
   cpp: `class Solution {
 public:
   ListNode* addTwoNumbers(ListNode* l1, ListNode* l2) {
@@ -744,14 +757,26 @@ solutions["reverse-linked-list"] = {
         self.val = val
         self.next = next
 
+def _to_list(arr):
+    if not arr: return None
+    head = ListNode(arr[0]); cur = head
+    for v in arr[1:]: cur.next = ListNode(v); cur = cur.next
+    return head
+
+def _from_list(node):
+    res = []
+    while node: res.append(node.val); node = node.next
+    return res
+
 def reverse_list(head):
+    if isinstance(head, list): head = _to_list(head)
     prev = None
     while head:
         nxt = head.next
         head.next = prev
         prev = head
         head = nxt
-    return prev`,
+    return _from_list(prev)`,
   cpp: `class Solution {
 public:
   ListNode* reverseList(ListNode* head) {
@@ -789,7 +814,19 @@ solutions["binary-tree-inorder-traversal"] = {
         self.left = left
         self.right = right
 
+def _to_tree(arr):
+    if not arr or arr[0] is None: return None
+    root = TreeNode(arr[0]); q = [root]; i = 1
+    while q and i < len(arr):
+        node = q.pop(0)
+        if i < len(arr) and arr[i] is not None: node.left = TreeNode(arr[i]); q.append(node.left)
+        i += 1
+        if i < len(arr) and arr[i] is not None: node.right = TreeNode(arr[i]); q.append(node.right)
+        i += 1
+    return root
+
 def inorder_traversal(root):
+    if isinstance(root, list): root = _to_tree(root)
     result, stack, cur = [], [], root
     while cur or stack:
         while cur:
@@ -848,7 +885,19 @@ solutions["validate-binary-search-tree"] = {
         self.left = left
         self.right = right
 
+def _to_tree(arr):
+    if not arr or arr[0] is None: return None
+    root = TreeNode(arr[0]); q = [root]; i = 1
+    while q and i < len(arr):
+        node = q.pop(0)
+        if i < len(arr) and arr[i] is not None: node.left = TreeNode(arr[i]); q.append(node.left)
+        i += 1
+        if i < len(arr) and arr[i] is not None: node.right = TreeNode(arr[i]); q.append(node.right)
+        i += 1
+    return root
+
 def is_valid_bst(root):
+    if isinstance(root, list): root = _to_tree(root)
     def validate(node, lo, hi):
         if not node: return True
         if lo is not None and node.val <= lo: return False
@@ -952,7 +1001,10 @@ solutions["clone-graph"] = {
         self.val = val
         self.neighbors = neighbors if neighbors is not None else []
 
-def clone_graph(node):
+def clone_graph(adjList):
+    nodes = [Node(i+1) for i in range(len(adjList))]
+    for i, neighbors in enumerate(adjList):
+        nodes[i].neighbors = [nodes[j-1] for j in neighbors]
     visited = {}
     def dfs(n):
         if not n: return None
@@ -961,7 +1013,16 @@ def clone_graph(node):
         visited[n] = clone
         clone.neighbors = [dfs(nei) for nei in n.neighbors]
         return clone
-    return dfs(node)`,
+    cloned = dfs(nodes[0]) if nodes else None
+    if not cloned: return []
+    res = []
+    def collect(n, seen):
+        if not n or n in seen: return
+        seen.add(n)
+        res.append([nei.val for nei in n.neighbors])
+        for nei in n.neighbors: collect(nei, seen)
+    collect(cloned, set())
+    return res`,
   cpp: `class Solution {
 public:
   unordered_map<Node*, Node*> visited;
@@ -1445,10 +1506,11 @@ solutions["word-ladder"] = {
     return 0;
   }
 }`,
-  python: `def ladder_length(begin_word, end_word, word_list):
-    word_set = set(word_list)
-    if end_word not in word_set: return 0
-    q = [begin_word]
+  python: `def ladder_length(beginWord, endWord, wordList):
+    word_set = set(wordList)
+    if endWord not in word_set: return 0
+    if beginWord == endWord: return 1
+    q = [beginWord]
     level = 1
     while q:
         for _ in range(len(q)):
@@ -1458,7 +1520,7 @@ solutions["word-ladder"] = {
                 for c in 'abcdefghijklmnopqrstuvwxyz':
                     cur[i] = c
                     nxt = ''.join(cur)
-                    if nxt == end_word: return level + 1
+                    if nxt == endWord: return level + 1
                     if nxt in word_set:
                         word_set.remove(nxt)
                         q.append(nxt)
@@ -1553,16 +1615,29 @@ solutions["merge-k-sorted-lists"] = {
         self.val = val
         self.next = next
 
+def _to_list(arr):
+    if not arr: return None
+    head = ListNode(arr[0]); cur = head
+    for v in arr[1:]: cur.next = ListNode(v); cur = cur.next
+    return head
+
+def _from_list(node):
+    res = []
+    while node: res.append(node.val); node = node.next
+    return res
+
 def merge_k_lists(lists):
-    if not lists: return None
+    if isinstance(lists, list) and lists and isinstance(lists[0], list):
+        lists = [_to_list(lst) for lst in lists]
+    if not lists: return []
     interval = 1
     while interval < len(lists):
         for i in range(0, len(lists) - interval, interval * 2):
-            lists[i] = merge(lists[i], lists[i + interval])
+            lists[i] = _merge(lists[i], lists[i + interval])
         interval *= 2
-    return lists[0]
+    return _from_list(lists[0])
 
-def merge(a, b):
+def _merge(a, b):
     dummy = tail = ListNode()
     while a and b:
         if a.val < b.val: tail.next = a; a = a.next

@@ -9,8 +9,10 @@ const WORK_DIR = '/tmp';
 
 function extractFunctionName(code: string, language: string): string | null {
   switch (language) {
-    case "python":
-      return code.match(/def\s+(\w+)/)?.[1] ?? null;
+    case "python": {
+      const pyDefs = [...code.matchAll(/^def\s+(\w+)/gm)].filter(m => !m[1].startsWith('_'));
+      return pyDefs.length > 0 ? pyDefs[pyDefs.length - 1][1] : null;
+    }
     case "java": {
       const skip = new Set(['main', 'toString', 'hashCode', 'equals', 'Solution']);
       const methods = [...code.matchAll(/(?:public\s+\S+\s+)?(\w+)\s*\([^)]*\)\s*(?:\{|throws)/g)];
@@ -65,7 +67,7 @@ function generatePyRunner(
   fn: string,
   testCasesJson: string
 ): { files: Record<string, string>; command: string } {
-  const classMatch = code.match(/^class\s+(\w+)/m);
+  const classMatch = code.match(/^class\s+(?!(?:ListNode|TreeNode|Node)\b)(\w+)/m);
   const className = classMatch ? classMatch[1] : '';
 
   // Detect design problem: test case input has ops/args format
@@ -83,7 +85,7 @@ function generatePyRunner(
     const runner = `
 import json, time, sys
 ${code}
-test_cases = ${testCasesJson}
+test_cases = json.loads(r"""${testCasesJson}""")
 results = []
 for tc in test_cases:
     start = time.time()
@@ -145,10 +147,10 @@ def _convert(inp, func):
             hint = param.annotation
             if hint is inspect.Parameter.empty: continue
             h = str(hint)
-            if hasListNode and 'ListNode' in h:
-                inp[name] = _arr_to_list(inp[name], ListNode)
-            elif hasTreeNode and 'TreeNode' in h:
-                inp[name] = _arr_to_tree(inp[name], TreeNode)
+            ${hasListNode ? `if 'ListNode' in h:
+                inp[name] = _arr_to_list(inp[name], ListNode)` : ''}
+            ${hasTreeNode ? `if 'TreeNode' in h:
+                inp[name] = _arr_to_tree(inp[name], TreeNode)` : ''}
     except: pass
     return inp
 ` : '';
@@ -161,7 +163,7 @@ def _convert(inp, func):
 import json, time, sys
 ${code}
 ${sharedPyLib}
-test_cases = ${testCasesJson}
+test_cases = json.loads(r"""${testCasesJson}""")
 results = []
 for tc in test_cases:
     start = time.time()
@@ -185,7 +187,7 @@ print(json.dumps({"results": results}))
 import json, time, sys
 ${code}
 ${sharedPyLib}
-test_cases = ${testCasesJson}
+test_cases = json.loads(r"""${testCasesJson}""")
 results = []
 for tc in test_cases:
     start = time.time()
