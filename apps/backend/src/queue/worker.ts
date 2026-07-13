@@ -82,7 +82,7 @@ export const createWorker = async (): Promise<Worker | null> => {
           },
         });
 
-        if (status === 'ACCEPTED') {
+        if (status === 'ACCEPTED' && process.env.OPENAI_API_KEY) {
           const problem = await prisma.problem.findUnique({
             where: { id: job.data.problemId },
             select: { title: true },
