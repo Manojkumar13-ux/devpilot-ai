@@ -157,6 +157,22 @@ router.get('/ready', async (_req: Request, res: Response) => {
   }
 });
 
+router.get('/debug/tables', async (_req: Request, res: Response) => {
+  try {
+    const tables: unknown = await prisma.$queryRawUnsafe("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
+    let userCheck = 'not attempted';
+    try {
+      const user = await prisma.user.findFirst();
+      userCheck = user ? 'found user' : 'table empty';
+    } catch (e) {
+      userCheck = 'error: ' + String(e);
+    }
+    res.json({ tables, userCheck });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 router.get('/live', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'alive',
