@@ -20,7 +20,7 @@ async function waitForDb(prisma: PrismaClient, retries = 5, delay = 3000): Promi
 }
 
 async function setup() {
-  const prisma = new PrismaClient({ connectionTimeout: 10000 });
+  const prisma = new PrismaClient();
 
   const ready = await waitForDb(prisma);
   if (!ready) {
