@@ -16,7 +16,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY . .
 RUN pnpm --filter @devpilot/shared build
-RUN pnpm exec prisma generate --schema=apps/backend/prisma/schema.prisma
+RUN npx --no-install prisma generate --schema=apps/backend/prisma/schema.prisma
 RUN pnpm --filter @devpilot/backend build
 
 FROM base AS runner
