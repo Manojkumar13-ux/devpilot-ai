@@ -34,4 +34,4 @@ COPY --from=builder /app/packages/shared/node_modules ./packages/shared/node_mod
 COPY --from=builder /app/infrastructure ./infrastructure
 USER devpilot
 EXPOSE 4000
-CMD ["sh", "-c", "cd apps/backend && ls -la prisma/ 2>&1 && echo '---' && npx --yes prisma db push --accept-data-loss --verbose 2>&1; echo '---EXIT---' $?; node dist/index.js"]
+CMD ["sh", "-c", "cd apps/backend && node dist/setup.js 2>&1 && echo '=== Setup complete ===' && node dist/index.js"]
