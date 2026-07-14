@@ -1,8 +1,36 @@
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+async function sleep(ms: number) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function waitForDb(prisma: PrismaClient, retries = 5, delay = 3000): Promise<boolean> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return true;
+    } catch {
+      if (i < retries - 1) {
+        console.log(`DB not ready, retrying in ${delay}ms (${i + 1}/${retries})...`);
+        await sleep(delay);
+      }
+    }
+  }
+  return false;
+}
 
 async function setup() {
+  const prisma = new PrismaClient({ connectionTimeout: 10000 });
+
+  const ready = await waitForDb(prisma);
+  if (!ready) {
+    console.warn('DB unreachable after retries — skipping table creation, server will start anyway');
+    await prisma.$disconnect();
+    return;
+  }
+
+  console.log('DB reachable, creating tables...');
+
   await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS "_prisma_migrations"`);
 
   await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "User" (
@@ -120,5 +148,4 @@ async function setup() {
 
 setup().catch(e => {
   console.error('Setup failed:', e);
-  process.exit(1);
 });
