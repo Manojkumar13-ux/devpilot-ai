@@ -34,4 +34,4 @@ COPY --from=builder /app/packages/shared/node_modules ./packages/shared/node_mod
 COPY --from=builder /app/infrastructure ./infrastructure
 USER devpilot
 EXPOSE 4000
-CMD ["sh", "-c", "cd apps/backend && ./node_modules/.bin/prisma db push --skip-generate --accept-data-loss 2>&1 && node dist/index.js"]
+CMD ["sh", "-c", "cd apps/backend && ls -la prisma/ 2>&1 && echo '---' && npx --yes prisma db push --accept-data-loss --verbose 2>&1; echo '---EXIT---' $?; node dist/index.js"]
