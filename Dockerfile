@@ -21,6 +21,7 @@ RUN pnpm --filter @devpilot/backend build
 
 FROM base AS runner
 ENV NODE_ENV=production
+ENV NODE_PATH=/app/apps/backend/node_modules
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 devpilot
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
 COPY --from=builder /app/apps/backend/prisma ./apps/backend/prisma
@@ -33,4 +34,4 @@ COPY --from=builder /app/packages/shared/node_modules ./packages/shared/node_mod
 COPY --from=builder /app/infrastructure ./infrastructure
 USER devpilot
 EXPOSE 4000
-CMD ["sh", "-c", "cd apps/backend && npx prisma db push --skip-generate && node dist/index.js"]
+CMD ["sh", "-c", "cd apps/backend && ./node_modules/.bin/prisma db push --skip-generate --accept-data-loss 2>&1 && node dist/index.js"]
